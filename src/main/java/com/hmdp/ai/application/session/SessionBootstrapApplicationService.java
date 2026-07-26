@@ -12,6 +12,7 @@ import com.hmdp.ai.domain.security.AiPermission;
 import com.hmdp.ai.domain.security.AuthorizationContext;
 import com.hmdp.ai.shared.exception.AiPlatformException;
 import com.hmdp.common.ErrorCode;
+import com.hmdp.security.customer.CustomerServicePermission;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 @Service
@@ -46,6 +48,7 @@ public class SessionBootstrapApplicationService {
                 user.nickName,
                 user.icon);
         List<MembershipRow> rows = loadMemberships(userId);
+        List<String> customerServiceCodes = customerServicePermissionCodes();
         List<SessionMembershipResponse> memberships = new ArrayList<>();
         for (MembershipRow row : rows) {
             List<String> roles = Collections.singletonList(row.role);
@@ -53,10 +56,11 @@ public class SessionBootstrapApplicationService {
             if ("ACTIVE".equals(row.status)) {
                 AuthorizationContext authorization = authorizationService.authorize(
                         userId, row.tenantId, row.workspaceId);
-                permissions = authorization.getPermissions().stream()
+                TreeSet<String> merged = authorization.getPermissions().stream()
                         .map(AiPermission::name)
-                        .sorted()
-                        .collect(Collectors.toList());
+                        .collect(Collectors.toCollection(TreeSet::new));
+                merged.addAll(customerServiceCodes);
+                permissions = new ArrayList<>(merged);
             } else {
                 permissions = Collections.emptyList();
             }
@@ -73,6 +77,31 @@ public class SessionBootstrapApplicationService {
             memberships = markDefault(memberships, defaultScope);
         }
         return new SessionBootstrapResponse(userResponse, memberships, defaultScope);
+    }
+
+    /**
+     * Customer-service permission codes come from {@code sys_permission} through the
+     * sa-token permission list; the frontend can call {@code can('cs:...')} directly.
+     * Membership scoping is enforced per request by the customer-service interceptor.
+     */
+    private List<String> customerServicePermissionCodes() {
+        List<String> raw;
+        try {
+            raw = StpUtil.getPermissionList();
+        } catch (RuntimeException e) {
+            return Collections.emptyList();
+        }
+        if (raw == null || raw.isEmpty()) {
+            return Collections.emptyList();
+        }
+        boolean wildcard = raw.contains("*");
+        List<String> codes = new ArrayList<>();
+        for (CustomerServicePermission permission : CustomerServicePermission.values()) {
+            if (wildcard || raw.contains(permission.code())) {
+                codes.add(permission.code());
+            }
+        }
+        return codes;
     }
 
     private UserRow loadUser(String userId) {

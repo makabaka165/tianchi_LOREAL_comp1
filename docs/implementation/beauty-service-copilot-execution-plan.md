@@ -289,9 +289,9 @@ BASE-001 -> BASE-003 -> ARCH-001 -> DATA-001 -> DATA-002 -> DATA-003
 | ID | 状态 | 里程碑 | 一句话结果 | 前置 |
 | --- | --- | --- | --- | --- |
 | BASE-001 | `DONE` | M0 | 固定代码、数据和测试基线 | 无 |
-| BASE-002 | `READY` | M0 | competition profile、Feature Flag 和降级配置 | BASE-001 |
-| BASE-003 | `IN_PROGRESS` | M0 | 建立不依赖 AI 领域包的客服 scope 权限入口 | BASE-001 |
-| ARCH-001 | `BLOCKED` | M0 | 用 ArchUnit 固化四上下文依赖方向 | BASE-003 |
+| BASE-002 | `IN_PROGRESS` | M0 | competition profile、Feature Flag 和降级配置 | BASE-001 |
+| BASE-003 | `DONE` | M0 | 建立不依赖 AI 领域包的客服 scope 权限入口 | BASE-001 |
+| ARCH-001 | `READY` | M0 | 用 ArchUnit 固化四上下文依赖方向 | BASE-003 |
 | CONTRACT-001 | `READY` | M0 | 冻结 API、错误码、双层输出和风险枚举 | BASE-001 |
 | DATA-001 | `BLOCKED` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
 | DATA-002 | `BLOCKED` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
@@ -570,7 +570,14 @@ CustomerServiceOpenApiContractTest
 - **验收标准**：客服包不引用 `com.hmdp.ai.domain.security`；跨 workspace ID 即使对象 ID 存在也返回无权或资源不存在；所有 Controller 显式声明权限。
 - **回滚方式**：Feature Flag 关闭客服路由；撤销代码使用追加迁移禁用权限，不删除已应用权限记录。
 - **Definition of Done**：权限迁移在空库/升级库成功，安全回归清单通过，`ARCH-001` 可开始。
-- **执行证据**：待填写。
+- **执行证据**：
+  - 执行者：Claude（连续执行会话）
+  - 分支：`main`
+  - 开始/结束：2026-07-26 21:52 / 22:10 (+08:00)
+  - 提交：`BASE-003: add customer service scope permission entry point`
+  - 验证命令与结果：`CustomerServicePermissionInterceptorTest`（12 用例：未登录/缺声明/缺 header/空 header/非成员/跨 workspace/权限不足/正常/wildcard/方法级注解/ThreadLocal 清理/非 HandlerMethod）、`SessionBootstrapApplicationServiceTest`（7 用例，含 cs:* 权限码暴露与 wildcard）、`SessionBootstrapInterceptorExclusionTest`（AI 拦截器排除客服路径 + 客服拦截器注册）全部通过；`mvn clean verify -Pfull-integration` BUILD SUCCESS（22/22）；`CustomerServicePermissionSchemaIT` 在全新容器走完整分段迁移链（含 MySQL8 兼容桥 = 升级路径等价物）后断言 6 个权限 + admin 绑定，并重放 seed 证明幂等。
+  - 迁移结果：`V20260726_01__customer_service_permissions.sql` 应用成功；seed 采用 `ON DUPLICATE KEY UPDATE` + `INSERT IGNORE`。
+  - 偏差/后续任务：普通客服/风险角色映射按计划推迟到 RELEASE-001；`SessionBootstrap` 通过 `StpUtil.getPermissionList()` 暴露 `cs:*` 权限码（wildcard `*` 展开为全部六项），供前端 `can('cs:...')`。
 
 ### ARCH-001 用 ArchUnit 固化四上下文边界
 

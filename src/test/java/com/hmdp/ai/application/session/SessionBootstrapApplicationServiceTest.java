@@ -7,6 +7,7 @@ import cn.dev33.satoken.context.SaTokenContextForThreadLocalStorage;
 import cn.dev33.satoken.servlet.model.SaRequestForServlet;
 import cn.dev33.satoken.servlet.model.SaResponseForServlet;
 import cn.dev33.satoken.servlet.model.SaStorageForServlet;
+import cn.dev33.satoken.stp.StpInterface;
 import cn.dev33.satoken.stp.StpUtil;
 import com.hmdp.ai.application.dto.session.SessionBootstrapResponse;
 import com.hmdp.ai.application.security.AiAuthorizationService;
@@ -22,8 +23,10 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,10 +39,13 @@ import static org.mockito.Mockito.when;
 
 class SessionBootstrapApplicationServiceTest {
     private SaTokenContext previousContext;
+    private StpInterface previousStpInterface;
+    private List<String> permissionCodes;
 
     @BeforeEach
     void setUpSaToken() {
         previousContext = SaManager.getSaTokenContext();
+        previousStpInterface = SaManager.getStpInterface();
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
         SaManager.setSaTokenContext(new SaTokenContextForThreadLocal());
@@ -47,6 +53,18 @@ class SessionBootstrapApplicationServiceTest {
                 new SaRequestForServlet(request),
                 new SaResponseForServlet(response),
                 new SaStorageForServlet(request));
+        permissionCodes = new ArrayList<>();
+        SaManager.setStpInterface(new StpInterface() {
+            @Override
+            public List<String> getPermissionList(Object loginId, String loginType) {
+                return new ArrayList<>(permissionCodes);
+            }
+
+            @Override
+            public List<String> getRoleList(Object loginId, String loginType) {
+                return Collections.emptyList();
+            }
+        });
     }
 
     @AfterEach
@@ -60,6 +78,7 @@ class SessionBootstrapApplicationServiceTest {
         }
         SaTokenContextForThreadLocalStorage.clearBox();
         SaManager.setSaTokenContext(previousContext);
+        SaManager.setStpInterface(previousStpInterface);
     }
 
     @SuppressWarnings("unchecked")
@@ -151,6 +170,49 @@ class SessionBootstrapApplicationServiceTest {
         assertThat(response.getMemberships().get(0).getPermissions()).isEmpty();
         assertThat(response.getMemberships().get(0).isDefault()).isFalse();
         assertThat(response.getDefaultScope()).isNull();
+    }
+
+    @Test
+    void exposesCustomerServicePermissionCodesForActiveMembership() {
+        StpUtil.login(6L);
+        permissionCodes.add("cs:workspace:read");
+        permissionCodes.add("cs:risk:read");
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        stubUserRow(jdbc, 6L, "agent", "");
+        stubMembershipRow(jdbc, "6", "RUNNER", "ACTIVE");
+        AiAuthorizationService authorization = mock(AiAuthorizationService.class);
+        when(authorization.authorize("6", "default", "default"))
+                .thenReturn(new AuthorizationContext(EnumSet.of(AiPermission.AGENT_RUN)));
+
+        SessionBootstrapApplicationService service =
+                new SessionBootstrapApplicationService(jdbc, authorization);
+
+        SessionBootstrapResponse response = service.bootstrap();
+
+        assertThat(response.getMemberships().get(0).getPermissions())
+                .contains("AGENT_RUN", "cs:workspace:read", "cs:risk:read")
+                .doesNotContain("cs:risk:manage");
+    }
+
+    @Test
+    void wildcardPermissionExposesAllCustomerServiceCodes() {
+        StpUtil.login(7L);
+        permissionCodes.add("*");
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        stubUserRow(jdbc, 7L, "admin", "");
+        stubMembershipRow(jdbc, "7", "OWNER", "ACTIVE");
+        AiAuthorizationService authorization = mock(AiAuthorizationService.class);
+        when(authorization.authorize("7", "default", "default"))
+                .thenReturn(new AuthorizationContext(EnumSet.of(AiPermission.ADMIN)));
+
+        SessionBootstrapApplicationService service =
+                new SessionBootstrapApplicationService(jdbc, authorization);
+
+        SessionBootstrapResponse response = service.bootstrap();
+
+        assertThat(response.getMemberships().get(0).getPermissions()).contains(
+                "cs:data:import", "cs:workspace:read", "cs:assist:request",
+                "cs:suggestion:decide", "cs:risk:read", "cs:risk:manage");
     }
 
     @Test

@@ -2,8 +2,10 @@ package com.hmdp.ai.api.security;
 
 import com.hmdp.ai.application.security.AiAuthorizationService;
 import com.hmdp.config.MvcConfig;
+import com.hmdp.security.customer.CustomerServicePermissionInterceptor;
 import com.hmdp.service.IUserService;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 
@@ -15,35 +17,63 @@ import static org.mockito.Mockito.mock;
 
 class SessionBootstrapInterceptorExclusionTest {
 
-    @Test
-    void bootstrapPathIsExcludedFromAiPermissionInterceptor() throws Exception {
-        AiPermissionInterceptor interceptor = new AiPermissionInterceptor(mock(AiAuthorizationService.class));
-        MvcConfig config = new MvcConfig(mock(IUserService.class), interceptor);
-        InterceptorRegistry registry = new InterceptorRegistry();
-        config.addInterceptors(registry);
-
+    private List<InterceptorRegistration> registrations(InterceptorRegistry registry) throws Exception {
         Field registrationsField = InterceptorRegistry.class.getDeclaredField("registrations");
         registrationsField.setAccessible(true);
         @SuppressWarnings("unchecked")
-        List<InterceptorRegistration> registrations =
+        List<InterceptorRegistration> result =
                 (List<InterceptorRegistration>) registrationsField.get(registry);
+        return result;
+    }
 
-        boolean foundExclusion = false;
-        for (InterceptorRegistration registration : registrations) {
-            Field interceptorField = InterceptorRegistration.class.getDeclaredField("interceptor");
-            interceptorField.setAccessible(true);
-            if (interceptorField.get(registration) != interceptor) {
-                continue;
+    private Object interceptorOf(InterceptorRegistration registration) throws Exception {
+        Field interceptorField = InterceptorRegistration.class.getDeclaredField("interceptor");
+        interceptorField.setAccessible(true);
+        return interceptorField.get(registration);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> patternsOf(InterceptorRegistration registration, String fieldName) throws Exception {
+        Field field = InterceptorRegistration.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return (List<String>) field.get(registration);
+    }
+
+    @Test
+    void bootstrapAndCustomerServicePathsAreExcludedFromAiPermissionInterceptor() throws Exception {
+        AiPermissionInterceptor aiInterceptor = new AiPermissionInterceptor(mock(AiAuthorizationService.class));
+        CustomerServicePermissionInterceptor csInterceptor =
+                new CustomerServicePermissionInterceptor(mock(JdbcTemplate.class));
+        MvcConfig config = new MvcConfig(mock(IUserService.class), aiInterceptor, csInterceptor);
+        InterceptorRegistry registry = new InterceptorRegistry();
+        config.addInterceptors(registry);
+
+        boolean bootstrapExcluded = false;
+        boolean customerServiceExcludedFromAi = false;
+        boolean customerServiceRegistered = false;
+        for (InterceptorRegistration registration : registrations(registry)) {
+            Object interceptor = interceptorOf(registration);
+            if (interceptor == aiInterceptor) {
+                List<String> excludes = patternsOf(registration, "excludePatterns");
+                bootstrapExcluded = excludes != null && excludes.contains("/api/v1/session/bootstrap");
+                customerServiceExcludedFromAi = excludes != null
+                        && excludes.contains("/api/v1/customer-service/**");
             }
-            Field excludeField = InterceptorRegistration.class.getDeclaredField("excludePatterns");
-            excludeField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            List<String> excludes = (List<String>) excludeField.get(registration);
-            foundExclusion = excludes != null && excludes.contains("/api/v1/session/bootstrap");
+            if (interceptor == csInterceptor) {
+                List<String> includes = patternsOf(registration, "includePatterns");
+                customerServiceRegistered = includes != null
+                        && includes.contains("/api/v1/customer-service/**");
+            }
         }
 
-        assertThat(foundExclusion)
+        assertThat(bootstrapExcluded)
                 .as("bootstrap must not require tenant/workspace headers")
+                .isTrue();
+        assertThat(customerServiceExcludedFromAi)
+                .as("customer-service paths must not be double-guarded by the AI interceptor")
+                .isTrue();
+        assertThat(customerServiceRegistered)
+                .as("customer-service paths must be guarded by the customer scope interceptor")
                 .isTrue();
     }
 }
