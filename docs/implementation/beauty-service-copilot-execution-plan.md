@@ -293,13 +293,13 @@ BASE-001 -> BASE-003 -> ARCH-001 -> DATA-001 -> DATA-002 -> DATA-003
 | BASE-003 | `DONE` | M0 | 建立不依赖 AI 领域包的客服 scope 权限入口 | BASE-001 |
 | ARCH-001 | `DONE` | M0 | 用 ArchUnit 固化四上下文依赖方向 | BASE-003 |
 | CONTRACT-001 | `DONE` | M0 | 冻结 API、错误码、双层输出和风险枚举 | BASE-001 |
-| DATA-001 | `READY` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
-| DATA-002 | `BLOCKED` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
+| DATA-001 | `DONE` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
+| DATA-002 | `READY` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
 | DATA-003 | `BLOCKED` | M1 | dry-run、错误报告和确认导入 API | DATA-002 |
 | DATA-004 | `BLOCKED` | M1 | 幂等提交、来源链接和消费者受限归并 | DATA-003 |
 | DATA-005 | `BLOCKED` | M1 | 服务轨迹和工作台组合查询 | DATA-004 |
 | DATA-006 | `BLOCKED` | M1 | 官方数据全量导入验收和标签泄漏门禁 | DATA-005 |
-| RISK-001 | `BLOCKED` | M2/M3 | 风险信号、预警、处置记录 DDL 与状态机 | DATA-001 |
+| RISK-001 | `READY` | M2/M3 | 风险信号、预警、处置记录 DDL 与状态机 | DATA-001 |
 | RISK-002 | `BLOCKED` | M2 | 确定性特征、风险策略和等级下限 | RISK-001, DATA-005 |
 | RISK-003 | `BLOCKED` | M2/M3 | 风险信号接收、归并、SLA 和新旧预警关联 | RISK-002 |
 | RISK-004 | `BLOCKED` | M3 | 风险读取和乐观锁命令 API | RISK-003 |
@@ -679,7 +679,14 @@ CustomerServiceOpenApiContractTest
 - **验收标准**：`information_schema.columns` 中不存在 `scene_major/scene_minor/target*`；字符串编号前导零不丢；同一会话可以关联多订单/多工单。
 - **回滚方式**：开发环境可清空数据库重建；共享环境只能追加迁移禁用或修正，不 drop 已产生的数据。
 - **Definition of Done**：DDL 空库/升级库通过，领域模型表达不变量，Repository 契约有单元测试。
-- **执行证据**：待填写。
+- **执行证据**：
+  - 执行者：Claude（连续执行会话）
+  - 分支：`main`
+  - 开始/结束：2026-07-26 22:50 / 23:20 (+08:00)
+  - 提交：`DATA-001: add service data schema, domain model and repository ports`
+  - 验证命令与结果：`ImportBatchTest`（11 用例状态机：preview->ready/rejected、确认哈希/parser/TTL/告警审阅/并发确认冲突、CONFIRMING 失败回退、终态不可再转移）、`ServiceDataDomainModelTest`（9 用例：前导零字符串编号、contentHash 校验、消息需正文或媒体、MISSING_MEDIA、别名 NFKC 归一化哈希、链接/会话/工单不变量）、`CustomerServiceModuleBoundaryTest` 回归；`ServiceDataSchemaIntegrationTest`（7 用例：10 表存在且带 scope/audit 列、information_schema 无 scene%/target% 列、前导零 roundtrip、一会话多订单链接、别名唯一键、消息来源键唯一、ImportBatch 乐观锁与跨 workspace 读隔离）在全新容器完整迁移链上通过。
+  - 迁移结果：`V20260726_02__customer_service_data_schema.sql` 建 10 张 `cs_data_*` 表；订单/工单为 append-only 版本化（scope+编号+content_hash 唯一）；`row_no` 规避 MySQL 8 保留字。
+  - 偏差/后续任务：Repository 端口中除 `ImportBatchRepository`（JDBC 已实现）外，事实写入端口聚合在 `ServiceFactRepositories` 中，DATA-004 落地各 JDBC writer 时再拆分；`cs_data_import_batch` 未对 (scope,hash) 建唯一键（历史批次允许多条），复用逻辑由 `findReusable` 承担。
 
 ### DATA-002 XLSX 解析、映射、校验和脱敏夹具
 
