@@ -43,6 +43,27 @@ hmdp:
       initial-fetch-multiplier: ${HMDP_SHOP_NEARBY_INITIAL_FETCH_MULTIPLIER:3}
       fetch-growth-factor: ${HMDP_SHOP_NEARBY_FETCH_GROWTH_FACTOR:2}
       max-scan-size: ${HMDP_SHOP_NEARBY_MAX_SCAN_SIZE:200}
+  # Customer-service vertical (beauty service copilot). All switches default to false;
+  # the competition profile enables them. When disabled, /api/v1/customer-service/**
+  # returns a stable CS_FEATURE_DISABLED error instead of 404.
+  customer-service:
+    enabled: ${HMDP_CS_ENABLED:false}
+    source-root: ${HMDP_CS_SOURCE_ROOT:}
+    import:
+      enabled: ${HMDP_CS_IMPORT_ENABLED:false}
+      staging-ttl-hours: ${HMDP_CS_IMPORT_STAGING_TTL_HOURS:24}
+      max-file-size-bytes: ${HMDP_CS_IMPORT_MAX_FILE_SIZE_BYTES:20971520}
+    assistance:
+      enabled: ${HMDP_CS_ASSISTANCE_ENABLED:false}
+      mode: ${HMDP_CS_ASSISTANCE_MODE:LIVE}
+      fallback-enabled: ${HMDP_CS_FALLBACK_ENABLED:true}
+      completion-scan-delay-ms: ${HMDP_CS_COMPLETION_SCAN_DELAY_MS:5000}
+      model-timeout-seconds: ${HMDP_CS_MODEL_TIMEOUT_SECONDS:30}
+      max-output-tokens: ${HMDP_CS_MAX_OUTPUT_TOKENS:1600}
+      max-concurrent-runs: ${HMDP_CS_MAX_CONCURRENT_RUNS:4}
+    risk:
+      enabled: ${HMDP_CS_RISK_ENABLED:false}
+      sla-scan-enabled: ${HMDP_CS_SLA_SCAN_ENABLED:true}
   ai:
     content-policy:
       blocked-patterns: ${AI_CONTENT_BLOCKED_PATTERNS:}

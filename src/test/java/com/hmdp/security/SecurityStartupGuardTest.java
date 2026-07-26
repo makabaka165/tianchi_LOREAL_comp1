@@ -60,6 +60,27 @@ class SecurityStartupGuardTest {
     }
 
     @Test
+    void prodShouldRejectCustomerServiceDemoFixtureMode() {
+        MockEnvironment environment = prodEnvironment()
+                .withProperty("hmdp.customer-service.assistance.mode", "DEMO_FIXTURE");
+
+        assertThatThrownBy(() -> new SecurityStartupGuard(environment).validateProductionSafety())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("DEMO_FIXTURE");
+    }
+
+    @Test
+    void prodShouldAcceptCustomerServiceLiveAndFallbackModes() {
+        assertThatCode(() -> new SecurityStartupGuard(
+                prodEnvironment().withProperty("hmdp.customer-service.assistance.mode", "LIVE"))
+                .validateProductionSafety()).doesNotThrowAnyException();
+        assertThatCode(() -> new SecurityStartupGuard(
+                prodEnvironment().withProperty("hmdp.customer-service.assistance.mode",
+                        "DETERMINISTIC_FALLBACK"))
+                .validateProductionSafety()).doesNotThrowAnyException();
+    }
+
+    @Test
     void prodShouldRejectForwardedHeadersWithWildcardTrustedProxies() {
         MockEnvironment environment = prodEnvironment()
                 .withProperty("hmdp.security.forwarded-headers.enabled", "true")

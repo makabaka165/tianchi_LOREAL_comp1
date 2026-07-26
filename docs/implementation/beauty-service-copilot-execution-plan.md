@@ -289,7 +289,7 @@ BASE-001 -> BASE-003 -> ARCH-001 -> DATA-001 -> DATA-002 -> DATA-003
 | ID | 状态 | 里程碑 | 一句话结果 | 前置 |
 | --- | --- | --- | --- | --- |
 | BASE-001 | `DONE` | M0 | 固定代码、数据和测试基线 | 无 |
-| BASE-002 | `IN_PROGRESS` | M0 | competition profile、Feature Flag 和降级配置 | BASE-001 |
+| BASE-002 | `DONE` | M0 | competition profile、Feature Flag 和降级配置 | BASE-001 |
 | BASE-003 | `DONE` | M0 | 建立不依赖 AI 领域包的客服 scope 权限入口 | BASE-001 |
 | ARCH-001 | `READY` | M0 | 用 ArchUnit 固化四上下文依赖方向 | BASE-003 |
 | CONTRACT-001 | `READY` | M0 | 冻结 API、错误码、双层输出和风险枚举 | BASE-001 |
@@ -543,7 +543,14 @@ CustomerServiceOpenApiContractTest
 - **验收标准**：默认 profile 不创建客服 Controller/Worker；competition profile 创建全部 Bean；无 AI key 时可启动并明确降级；prod + fixture 组合启动失败。
 - **回滚方式**：关闭总开关；移除 competition profile 不影响既有 profile。
 - **Definition of Done**：配置元数据、环境变量说明、条件 Bean 测试和健康状态全部可验证。
-- **执行证据**：待填写。
+- **执行证据**：
+  - 执行者：Claude（连续执行会话）
+  - 分支：`main`
+  - 开始/结束：2026-07-26 21:55 / 22:15 (+08:00)
+  - 提交：`BASE-002: add competition profile, feature flags and degradation config`
+  - 验证命令与结果：`CompetitionProfileContextTest`（7 用例：默认全关、competition 值绑定、health 细节、禁用 503、启用放行、非客服路径不受影响）与 `SecurityStartupGuardTest`（10 用例，含 prod 拒绝 DEMO_FIXTURE、接受 LIVE/DETERMINISTIC_FALLBACK）全部通过。
+  - 迁移结果：无迁移。
+  - 偏差/后续任务：`CS_FEATURE_DISABLED` 由始终注册的 `CustomerServiceFeatureGateFilter`（`com.hmdp.security.customer`）以 503 返回——拦截器在无 handler 时不会执行，Filter 才能保证"不表现为 404"；`CustomerServiceProperties` 位于计划建议的 `serviceassist.infrastructure.config`，Filter 为避免跨包依赖直接用 `@Value` 读主开关；prod+fixture 校验放入既有 `SecurityStartupGuard`（复用既定 prod 安全模式）；health 子组件目前报告开关与模式，Agent Seed/模型能力细节待 AGENT-003 后补；competition profile 全量真机启动验证与首个客服 Controller（DATA-003）的集成测试一起做。
 
 ### BASE-003 建立客服 scope 权限入口
 

@@ -1,0 +1,39 @@
+# Competition profile for the beauty-service-copilot vertical.
+# Activates the customer-service feature set on top of the existing platform without
+# changing local/test/prod behaviour. Real credentials come from the environment; this
+# file must never contain secrets.
+#
+# Start with:
+#   mvn spring-boot:run -Dspring-boot.run.profiles=competition
+# Assistance mode is selectable at launch:
+#   HMDP_CS_ASSISTANCE_MODE=LIVE                    real model calls (default)
+#   HMDP_CS_ASSISTANCE_MODE=DETERMINISTIC_FALLBACK  offline-safe deterministic suggestions
+#   HMDP_CS_ASSISTANCE_MODE=DEMO_FIXTURE            versioned demo fixtures (competition only;
+#                                                   prod startup fails with this mode)
+
+hmdp:
+  customer-service:
+    enabled: true
+    source-root: ${HMDP_CS_SOURCE_ROOT:}
+    import:
+      enabled: true
+      staging-ttl-hours: ${HMDP_CS_IMPORT_STAGING_TTL_HOURS:24}
+    assistance:
+      enabled: true
+      mode: ${HMDP_CS_ASSISTANCE_MODE:LIVE}
+      fallback-enabled: ${HMDP_CS_FALLBACK_ENABLED:true}
+      completion-scan-delay-ms: ${HMDP_CS_COMPLETION_SCAN_DELAY_MS:5000}
+      model-timeout-seconds: ${HMDP_CS_MODEL_TIMEOUT_SECONDS:30}
+      max-output-tokens: ${HMDP_CS_MAX_OUTPUT_TOKENS:1600}
+      max-concurrent-runs: ${HMDP_CS_MAX_CONCURRENT_RUNS:4}
+    risk:
+      enabled: true
+      sla-scan-enabled: ${HMDP_CS_SLA_SCAN_ENABLED:true}
+  sms:
+    mock:
+      enabled: ${HMDP_SMS_MOCK_ENABLED:true}
+
+# RAG stays configurable: policy/SOP retrieval is optional and the workbench must stay
+# functional without it (degraded answers carry an explicit "knowledge unavailable" flag).
+rag:
+  enabled: ${RAG_ENABLED:false}

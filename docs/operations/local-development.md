@@ -182,6 +182,24 @@ docker compose -f docker-compose.ai.yml down
 
 Only use `down -v` when the local MySQL, Redis and MinIO volumes are intentionally disposable.
 
+## Competition profile (customer-service vertical)
+
+The beauty-service-copilot vertical is disabled by default in every profile. To run it locally:
+
+```bash
+export HMDP_CS_SOURCE_ROOT=/path/to/competition/materials   # local only, never committed
+export HMDP_SMS_MOCK_ENABLED=true
+mvn spring-boot:run -Dspring-boot.run.profiles=competition
+```
+
+Behaviour matrix (non-sensitive configuration only):
+
+- `hmdp.customer-service.enabled` and the `import`/`assistance`/`risk` switches default to `false`; the `competition` profile turns them on. Other profiles are unaffected.
+- While the vertical is disabled, `/api/v1/customer-service/**` answers `503 CS_FEATURE_DISABLED` instead of a bare 404.
+- `hmdp.customer-service.assistance.mode` selects `LIVE`, `DETERMINISTIC_FALLBACK` or `DEMO_FIXTURE`. `DEMO_FIXTURE` is for offline demos only; the prod profile refuses to start with it.
+- Without a model API key the platform still boots: the workbench keeps serving typed facts and the health endpoint reports the assistance component as degraded rather than failing the whole service.
+- `/actuator/health` includes a `customerService` component with the enabled flags and generation mode; it never exposes keys.
+
 ## Troubleshooting
 
 - MySQL connection failure: compare `DB_URL`, `DB_USERNAME` and `DB_PASSWORD` with Compose.

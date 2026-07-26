@@ -46,6 +46,10 @@ public class SecurityStartupGuard {
                 fail("hmdp.security.forwarded-headers.trusted-proxies must contain explicit trusted proxy IPs in prod profile");
             }
         }
+        String assistanceMode = environment.getProperty("hmdp.customer-service.assistance.mode", "LIVE");
+        if ("DEMO_FIXTURE".equalsIgnoreCase(assistanceMode.trim())) {
+            fail("hmdp.customer-service.assistance.mode must not be DEMO_FIXTURE in prod profile");
+        }
     }
 
     private boolean isProductionProfile() {
