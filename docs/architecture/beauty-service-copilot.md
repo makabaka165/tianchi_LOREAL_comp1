@@ -407,6 +407,8 @@ Optional: Python capability service for native vision/OCR/local models
 
 ## 14. 分阶段实施
 
+本节定义阶段目标；任务依赖、精确文件、Flyway 顺序、验证命令、验收和回滚以[连续执行实施计划](../implementation/beauty-service-copilot-execution-plan.md)为准。
+
 ### Phase 0：边界与契约
 
 - 固定上下文地图、输出 Schema、风险类型和首条演示会话。

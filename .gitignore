@@ -49,3 +49,16 @@ frontend/coverage/
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
+
+### Competition source data and derived artifacts (never commit) ###
+local-data/
+data/raw/
+*.xlsx
+*.docx
+*.pptx
+!src/test/resources/**/*.xlsx
+scripts/customer-service/tmp/
+docs/implementation/evidence/**/raw/
+experiments/output/
+experiments/**/failure-details/
+temp_diff.txt

@@ -12,8 +12,6 @@ import com.hmdp.ai.domain.security.AiPermission;
 import com.hmdp.ai.domain.security.AuthorizationContext;
 import com.hmdp.ai.shared.exception.AiPlatformException;
 import com.hmdp.common.ErrorCode;
-import com.hmdp.entity.User;
-import com.hmdp.service.IUserService;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -26,13 +24,11 @@ import java.util.stream.Collectors;
 @Service
 public class SessionBootstrapApplicationService {
     private final JdbcTemplate jdbcTemplate;
-    private final IUserService userService;
     private final AiAuthorizationService authorizationService;
 
-    public SessionBootstrapApplicationService(JdbcTemplate jdbcTemplate, IUserService userService,
+    public SessionBootstrapApplicationService(JdbcTemplate jdbcTemplate,
                                               AiAuthorizationService authorizationService) {
         this.jdbcTemplate = jdbcTemplate;
-        this.userService = userService;
         this.authorizationService = authorizationService;
     }
 
@@ -41,14 +37,14 @@ public class SessionBootstrapApplicationService {
             throw new AiPlatformException(ErrorCode.UNAUTHORIZED, "login required");
         }
         String userId = StpUtil.getLoginIdAsString();
-        User user = userService.getById(Long.valueOf(userId));
+        UserRow user = loadUser(userId);
         if (user == null) {
             throw new AiPlatformException(ErrorCode.UNAUTHORIZED, "login required");
         }
         SessionUserResponse userResponse = new SessionUserResponse(
-                String.valueOf(user.getId()),
-                user.getNickName() == null ? "" : user.getNickName(),
-                user.getIcon() == null ? "" : user.getIcon());
+                user.id,
+                user.nickName,
+                user.icon);
         List<MembershipRow> rows = loadMemberships(userId);
         List<SessionMembershipResponse> memberships = new ArrayList<>();
         for (MembershipRow row : rows) {
@@ -77,6 +73,21 @@ public class SessionBootstrapApplicationService {
             memberships = markDefault(memberships, defaultScope);
         }
         return new SessionBootstrapResponse(userResponse, memberships, defaultScope);
+    }
+
+    private UserRow loadUser(String userId) {
+        try {
+            List<UserRow> rows = jdbcTemplate.query(
+                    "select id, nick_name, icon from tb_user where id = ?",
+                    (rs, rowNum) -> new UserRow(
+                            rs.getString("id"),
+                            rs.getString("nick_name") == null ? "" : rs.getString("nick_name"),
+                            rs.getString("icon") == null ? "" : rs.getString("icon")),
+                    Long.valueOf(userId));
+            return rows.isEmpty() ? null : rows.get(0);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private List<MembershipRow> loadMemberships(String userId) {
@@ -128,6 +139,18 @@ public class SessionBootstrapApplicationService {
                     membership.getStatus()));
         }
         return result;
+    }
+
+    private static final class UserRow {
+        private final String id;
+        private final String nickName;
+        private final String icon;
+
+        private UserRow(String id, String nickName, String icon) {
+            this.id = id;
+            this.nickName = nickName;
+            this.icon = icon;
+        }
     }
 
     private static final class MembershipRow {

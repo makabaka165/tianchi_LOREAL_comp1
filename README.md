@@ -197,14 +197,23 @@ docker compose -f docker-compose.ai.yml up -d --wait
 
 > Oracle MySQL 8 首次初始化需要处理两条历史迁移的兼容桥接。请在第一次启动后端前阅读[本地开发与 MySQL 8 初始化](docs/operations/local-development.md)，不要修改已经发布的 Flyway 文件。
 
+数据库初始化顺序固定为两步：先导入 `src/main/resources/db/hmdp.sql` 建立基础业务表，随后启动应用时 Flyway 会自动执行 `src/main/resources/db/migration` 下的全部增量迁移。不要只导入 `hmdp.sql` 后关闭 Flyway，否则 AI 平台与后续客服领域表会缺失。
+
+在 Oracle MySQL 8 上，如两条历史迁移出现 checksum 校验失败，请使用 `scripts/repair-mysql8-flyway-compatibility.ps1` 完成兼容桥接；脚本会将 `20260720.03` 与 `20260721.01` 的成功校验和对齐为 `2143241596` 与 `814957484`，不会修改任何已发布迁移文件。
+
 ```bash
 export DB_PASSWORD=change_me_local
 export MINIO_ACCESS_KEY=local_minio_user
 export MINIO_SECRET_KEY=change_me_local_minio
 export HMDP_SMS_MOCK_ENABLED=true
+export REDIS_PORT=6381
+export MEMORY_REDIS_PORT=6381
+export VECTOR_REDIS_PORT=6380
 
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
+
+> 本地基础设施端口全部只绑定 `127.0.0.1`：MySQL `3307`、业务/记忆 Redis `6381`（`REDIS_PORT=6381`、`MEMORY_REDIS_PORT=6381`）、向量 Redis Stack `6380`（`VECTOR_REDIS_PORT=6380`）、MinIO `9000/9001`。修改端口时保持 `.env`、`docker-compose.ai.yml` 与应用配置一致。
 
 ### 3. 启动 AI Studio
 
@@ -308,7 +317,7 @@ GitHub Actions 将构建、完整集成、安全扫描和 OpenAPI 合同拆成�
 
 | 主题 | 文档 |
 | --- | --- |
-| 客服共情副驾 | [上下文地图](CONTEXT-MAP.md) · [目标架构](docs/architecture/beauty-service-copilot.md) · [输出契约](docs/contracts/customer-service-assistance-output.schema.json) |
+| 客服共情副驾 | [上下文地图](CONTEXT-MAP.md) · [目标架构](docs/architecture/beauty-service-copilot.md) · [连续执行实施计划](docs/implementation/beauty-service-copilot-execution-plan.md) · [输出契约](docs/contracts/customer-service-assistance-output.schema.json) |
 | 平台总览 | [Agent Platform Overview](docs/architecture/agent-platform-overview.md) |
 | Agent 与 Workflow Runtime | [Agent Runtime](docs/architecture/agent-runtime.md) · [Workflow Runtime](docs/architecture/workflow-runtime.md) |
 | 知识入库与检索 | [Knowledge Ingestion](docs/architecture/knowledge-ingestion.md) · [Hybrid Retrieval](docs/architecture/hybrid-retrieval.md) |
