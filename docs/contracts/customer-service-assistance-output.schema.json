@@ -1,0 +1,242 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/customer-service-assistance-output-v1.json",
+  "title": "Customer Service Assistance Output V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "analysis",
+    "facts",
+    "replyDraft",
+    "actions",
+    "citations",
+    "warnings",
+    "needHumanEscalation"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0"
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intentCode", "subIntentCode", "summary", "emotion", "riskSignals"],
+      "properties": {
+        "intentCode": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+        },
+        "subIntentCode": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "emotion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label", "trend", "confidence"],
+          "properties": {
+            "label": {
+              "enum": ["POSITIVE", "NEUTRAL", "NEGATIVE", "ANGRY", "ANXIOUS", "DISTRESSED", "UNKNOWN"]
+            },
+            "trend": {
+              "enum": ["IMPROVING", "STABLE", "WORSENING", "UNKNOWN"]
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "riskSignals": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/definitions/riskSignal"
+          }
+        }
+      }
+    },
+    "facts": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "value", "evidenceRefs"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-zA-Z0-9.]{1,63}$"
+          },
+          "value": {
+            "type": ["string", "number", "integer", "boolean", "null"]
+          },
+          "evidenceRefs": {
+            "$ref": "#/definitions/nonEmptyEvidenceRefs"
+          }
+        }
+      }
+    },
+    "replyDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "tone", "editable", "evidenceRefs"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "tone": {
+          "enum": ["WARM", "CALM", "APOLOGETIC", "CONCISE", "PROFESSIONAL"]
+        },
+        "editable": {
+          "const": true
+        },
+        "evidenceRefs": {
+          "$ref": "#/definitions/nonEmptyEvidenceRefs"
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "title", "parameters", "requiresHumanConfirmation", "evidenceRefs"],
+        "properties": {
+          "code": {
+            "enum": [
+              "INSERT_REPLY",
+              "REQUEST_MORE_INFORMATION",
+              "OPEN_SERVICE_CASE",
+              "ESCALATE_SPECIALIST",
+              "FLAG_RISK",
+              "VIEW_ORDER",
+              "VIEW_CASE"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "parameters": {
+            "type": "object",
+            "maxProperties": 16
+          },
+          "requiresHumanConfirmation": {
+            "const": true
+          },
+          "evidenceRefs": {
+            "$ref": "#/definitions/nonEmptyEvidenceRefs"
+          }
+        }
+      }
+    },
+    "citations": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["refId", "sourceType", "sourceId", "label"],
+        "properties": {
+          "refId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+          },
+          "sourceType": {
+            "enum": ["MESSAGE", "ORDER_SNAPSHOT", "SERVICE_CASE", "RISK_ALERT", "KNOWLEDGE_CHUNK"]
+          },
+          "sourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "needHumanEscalation": {
+      "type": "boolean"
+    }
+  },
+  "definitions": {
+    "evidenceRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 16,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+      }
+    },
+    "nonEmptyEvidenceRefs": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/evidenceRefs"
+        },
+        {
+          "minItems": 1
+        }
+      ]
+    },
+    "riskSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "severity", "confidence", "summary", "evidenceRefs"],
+      "properties": {
+        "type": {
+          "enum": [
+            "ADVERSE_REACTION",
+            "EMOTION_ESCALATION",
+            "REPEAT_CONTACT",
+            "REFUND_ANOMALY",
+            "LOGISTICS_EXCEPTION",
+            "MISSING_OR_WRONG_ITEM",
+            "PROMISE_DISPUTE",
+            "PUBLIC_OPINION_RISK"
+          ]
+        },
+        "severity": {
+          "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "evidenceRefs": {
+          "$ref": "#/definitions/nonEmptyEvidenceRefs"
+        }
+      }
+    }
+  }
+}

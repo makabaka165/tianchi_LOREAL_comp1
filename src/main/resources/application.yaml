@@ -1,0 +1,270 @@
+hmdp:
+  cache:
+    ttl-jitter-minutes: 5
+    mutex:
+      wait-timeout-millis: 300
+      lease-time-seconds: 10
+      retry-after-fail:
+        enabled: ${HMDP_CACHE_MUTEX_RETRY_AFTER_FAIL_ENABLED:true}
+        max-attempts: ${HMDP_CACHE_MUTEX_RETRY_AFTER_FAIL_MAX_ATTEMPTS:3}
+        sleep-millis: ${HMDP_CACHE_MUTEX_RETRY_AFTER_FAIL_SLEEP_MILLIS:50}
+        fallback-to-db: ${HMDP_CACHE_MUTEX_RETRY_AFTER_FAIL_FALLBACK_TO_DB:false}
+    logical:
+      min-physical-ttl-minutes: 10
+    rebuild-executor:
+      core-size: 4
+      max-size: 10
+      queue-capacity: 100
+      keep-alive-seconds: 60
+      await-termination-seconds: 10
+  blog:
+    hot-cache-size: 100
+    like-top-limit: 5
+    feed-page-size: 10
+    feed-fetch-multiplier: 2
+    feed-inbox-max-size: 1000
+    large-author-fans-threshold: 10000
+  security:
+    forwarded-headers:
+      enabled: false
+      trusted-proxies: 127.0.0.1,::1
+    device-fingerprint:
+      trust-client-header: false
+  sms:
+    mock:
+      enabled: ${HMDP_SMS_MOCK_ENABLED:false}
+    log-code: false
+  upload:
+    image-dir: ${HMDP_IMAGE_UPLOAD_DIR:D:/lesson/nginx-1.18.0/html/hmdp/imgs/}
+    blog-image:
+      owner-ttl-days: 7
+  shop:
+    nearby:
+      initial-fetch-multiplier: ${HMDP_SHOP_NEARBY_INITIAL_FETCH_MULTIPLIER:3}
+      fetch-growth-factor: ${HMDP_SHOP_NEARBY_FETCH_GROWTH_FACTOR:2}
+      max-scan-size: ${HMDP_SHOP_NEARBY_MAX_SCAN_SIZE:200}
+  ai:
+    content-policy:
+      blocked-patterns: ${AI_CONTENT_BLOCKED_PATTERNS:}
+    redis:
+      business:
+        host: ${REDIS_HOST:127.0.0.1}
+        port: ${REDIS_PORT:6379}
+        password: ${REDIS_PASSWORD:}
+        database: ${REDIS_DATABASE:0}
+      memory:
+        host: ${MEMORY_REDIS_HOST:127.0.0.1}
+        port: ${MEMORY_REDIS_PORT:6379}
+        password: ${MEMORY_REDIS_PASSWORD:}
+        database: ${MEMORY_REDIS_DATABASE:1}
+      vector:
+        host: ${VECTOR_REDIS_HOST:127.0.0.1}
+        port: ${VECTOR_REDIS_PORT:6380}
+        password: ${VECTOR_REDIS_PASSWORD:}
+        database: ${VECTOR_REDIS_DATABASE:0}
+    redis-health-check: true
+    redisson-fallback: false
+    model:
+      timeout-seconds: ${HMDP_AI_MODEL_TIMEOUT_SECONDS:30}
+    stream:
+      max-response-chars: ${HMDP_AI_STREAM_MAX_RESPONSE_CHARS:100000}
+    resilience:
+      max-concurrent-calls: ${HMDP_AI_MAX_CONCURRENT_CALLS:8}
+      rate-limit-period-seconds: ${HMDP_AI_RATE_LIMIT_PERIOD_SECONDS:1}
+      rate-limit-permits: ${HMDP_AI_RATE_LIMIT_PERMITS:2}
+    runtime:
+      core-threads: ${AI_RUNTIME_CORE_THREADS:2}
+      max-threads: ${AI_RUNTIME_MAX_THREADS:8}
+      queue-capacity: ${AI_RUNTIME_QUEUE_CAPACITY:200}
+      recovery-batch-size: ${AI_RUNTIME_RECOVERY_BATCH_SIZE:100}
+      recovery-enabled: ${AI_RUNTIME_RECOVERY_ENABLED:true}
+    sandbox:
+      allowed-images: ${AI_SANDBOX_ALLOWED_IMAGES:}
+    quota:
+      enabled: ${HMDP_AI_QUOTA_ENABLED:true}
+      minute-permits: ${HMDP_AI_QUOTA_MINUTE_PERMITS:10}
+      daily-permits: ${HMDP_AI_QUOTA_DAILY_PERMITS:200}
+      fail-open: ${HMDP_AI_QUOTA_FAIL_OPEN:false}
+    memory:
+      admin-scan-limit: ${HMDP_AI_MEMORY_ADMIN_SCAN_LIMIT:10000}
+    prompt:
+      canary:
+        enabled: ${HMDP_AI_PROMPT_CANARY_ENABLED:false}
+        ratio: ${HMDP_AI_PROMPT_CANARY_RATIO:0}
+      stable:
+        summary: shop-summary-v3
+        quality-summary: shop-quality-summary-v2
+        qa: shop-qa-v3
+        compare: shop-compare-v3
+        recommend: shop-recommend-v3
+      canary-version:
+        summary: shop-summary-v3
+        quality-summary: shop-quality-summary-v2
+        qa: shop-qa-v3
+        compare: shop-compare-v3
+        recommend: shop-recommend-v3
+    task:
+      enabled: ${HMDP_AI_TASK_ENABLED:true}
+      worker-threads: ${HMDP_AI_TASK_WORKER_THREADS:2}
+      result-ttl-hours: ${HMDP_AI_TASK_RESULT_TTL_HOURS:24}
+      queue-key: ${HMDP_AI_TASK_QUEUE_KEY:hmdp:ai:task:queue}
+      bucket-prefix: ${HMDP_AI_TASK_BUCKET_PREFIX:hmdp:ai:task:}
+      stream-timeout-minutes: ${HMDP_AI_TASK_STREAM_TIMEOUT_MINUTES:10}
+      heartbeat-interval-seconds: ${HMDP_AI_TASK_HEARTBEAT_INTERVAL_SECONDS:30}
+      running-timeout-minutes: ${HMDP_AI_TASK_RUNNING_TIMEOUT_MINUTES:30}
+      pending-timeout-minutes: ${HMDP_AI_TASK_PENDING_TIMEOUT_MINUTES:30}
+      max-retry-count: ${HMDP_AI_TASK_MAX_RETRY_COUNT:3}
+      stuck-scan-enabled: ${HMDP_AI_TASK_STUCK_SCAN_ENABLED:true}
+      stuck-scan-fixed-delay-millis: ${HMDP_AI_TASK_STUCK_SCAN_FIXED_DELAY_MILLIS:60000}
+      stuck-scan-limit: ${HMDP_AI_TASK_STUCK_SCAN_LIMIT:100}
+      batch-summary:
+        default-shop-limit: ${HMDP_AI_TASK_BATCH_SUMMARY_DEFAULT_SHOP_LIMIT:200}
+      schedule:
+        batch-summary:
+          enabled: ${HMDP_AI_TASK_SCHEDULE_BATCH_SUMMARY_ENABLED:false}
+          cron: ${HMDP_AI_TASK_SCHEDULE_BATCH_SUMMARY_CRON:0 0 3 * * *}
+          shop-limit: ${HMDP_AI_TASK_SCHEDULE_BATCH_SUMMARY_SHOP_LIMIT:200}
+  cors:
+    allowed-origin-patterns: ${HMDP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+  voucher:
+    order:
+      worker-threads: ${HMDP_VOUCHER_ORDER_WORKER_THREADS:2}
+      close-worker-threads: ${HMDP_VOUCHER_ORDER_CLOSE_WORKER_THREADS:1}
+      stream-required: ${HMDP_VOUCHER_ORDER_STREAM_REQUIRED:true}
+      stream-health-check-enabled: ${HMDP_VOUCHER_ORDER_STREAM_HEALTH_CHECK_ENABLED:true}
+      pay-timeout-minutes: 15
+      close-scan-limit: 100
+      close-scan-fixed-delay-millis: 60000
+      close-scan-initial-delay-millis: 60000
+
+server:
+  port: 8081
+
+spring:
+  profiles:
+    default: local
+  application:
+    name: hmdp
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3307/hmdp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    lettuce:
+      pool:
+        max-active: 10
+        max-idle: 10
+        min-idle: 1
+        time-between-eviction-runs: 10s
+  jackson:
+    default-property-inclusion: non_null
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+mybatis-plus:
+  type-aliases-package: com.hmdp.entity
+
+sa-token:
+  token-name: authorization
+  token-prefix: Bearer
+  timeout: ${SA_TOKEN_TIMEOUT:604800}
+  active-timeout: ${SA_TOKEN_ACTIVE_TIMEOUT:7200}
+  is-concurrent: ${SA_TOKEN_IS_CONCURRENT:true}
+  is-share: ${SA_TOKEN_IS_SHARE:false}
+  token-style: uuid
+  is-log: true
+
+logging:
+  level:
+    com.hmdp: info
+    dev.langchain4j: warn
+    dev.langchain4j.model.openai: warn
+    org.apache.http.wire: warn
+  pattern:
+    dateformat: mm:ss.SSS
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info}
+  endpoint:
+    health:
+      show-details: never
+
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: ${AI_CHAT_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${AI_CHAT_API_KEY:}
+      model-name: ${AI_CHAT_MODEL:qwen-plus}
+      temperature: ${AI_CHAT_TEMPERATURE:0.3}
+      repair-temperature: ${AI_REPAIR_TEMPERATURE:0.1}
+      max-tokens: ${AI_CHAT_MAX_TOKENS:1000}
+      log-requests: ${AI_LOG_REQUESTS:false}
+      log-responses: ${AI_LOG_RESPONSES:false}
+    streaming-chat-model:
+      api-key: ${AI_CHAT_API_KEY:}
+      base-url: ${AI_CHAT_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      model-name: ${AI_STREAM_MODEL:${AI_CHAT_MODEL:qwen-plus}}
+      temperature: ${AI_STREAM_TEMPERATURE:${AI_CHAT_TEMPERATURE:0.3}}
+      max-tokens: ${AI_STREAM_MAX_TOKENS:${AI_CHAT_MAX_TOKENS:1000}}
+      log-requests: ${AI_LOG_REQUESTS:false}
+      log-responses: ${AI_LOG_RESPONSES:false}
+    embedding-model:
+      base-url: ${AI_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${AI_EMBEDDING_API_KEY:}
+      model-name: ${AI_EMBEDDING_MODEL:text-embedding-v3}
+      log-requests: ${AI_LOG_REQUESTS:false}
+      log-responses: ${AI_LOG_RESPONSES:false}
+      max-segments-per-batch: ${AI_EMBEDDING_MAX_SEGMENTS_PER_BATCH:10}
+
+chat:
+  memory:
+    max-messages: 20
+    ttl:
+      shop-summary: ${CHAT_MEMORY_TTL_SHOP_SUMMARY:3600}
+      shop-qa: ${CHAT_MEMORY_TTL_SHOP_QA:7200}
+      shop-compare: ${CHAT_MEMORY_TTL_SHOP_COMPARE:1800}
+      shop-recommend: ${CHAT_MEMORY_TTL_SHOP_RECOMMEND:86400}
+      ai-chat: ${CHAT_MEMORY_TTL_AI_CHAT:3600}
+    redis:
+      key-prefix: "chat:memory:"
+      ttl: ${CHAT_MEMORY_REDIS_TTL:7200}
+
+rag:
+  enabled: ${RAG_ENABLED:true}
+  data:
+    auto-import: ${RAG_DATA_AUTO_IMPORT:false}
+  review:
+    enabled: true
+    index-name: shop_review_kb
+    dimension: 1024
+    min-score: 0.55
+    max-vector-candidates: 20
+    backfill-page-size: 200
+    compact:
+      enabled: true
+      warn-invalid-ratio: 0.3
+  platform-policy:
+    index-name: platform_policy_kb
+    dimension: 1024
+  redis:
+    host: ${VECTOR_REDIS_HOST:127.0.0.1}
+    port: ${VECTOR_REDIS_PORT:6380}
+    password: ${VECTOR_REDIS_PASSWORD:}
+    dimension: ${RAG_REDIS_DIMENSION:1024}
+    fallback-to-memory: ${RAG_REDIS_FALLBACK_TO_MEMORY:false}
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  bucket: ${MINIO_BUCKET:hmdp-ai}
