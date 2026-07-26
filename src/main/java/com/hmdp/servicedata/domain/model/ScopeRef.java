@@ -12,7 +12,7 @@ public final class ScopeRef {
         this.workspaceId = requireText(workspaceId, "workspaceId");
     }
 
-    static String requireText(String value, String field) {
+    public static String requireText(String value, String field) {
         if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException(field + " must not be blank");
         }

@@ -294,8 +294,8 @@ BASE-001 -> BASE-003 -> ARCH-001 -> DATA-001 -> DATA-002 -> DATA-003
 | ARCH-001 | `DONE` | M0 | 用 ArchUnit 固化四上下文依赖方向 | BASE-003 |
 | CONTRACT-001 | `DONE` | M0 | 冻结 API、错误码、双层输出和风险枚举 | BASE-001 |
 | DATA-001 | `DONE` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
-| DATA-002 | `READY` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
-| DATA-003 | `BLOCKED` | M1 | dry-run、错误报告和确认导入 API | DATA-002 |
+| DATA-002 | `DONE` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
+| DATA-003 | `READY` | M1 | dry-run、错误报告和确认导入 API | DATA-002 |
 | DATA-004 | `BLOCKED` | M1 | 幂等提交、来源链接和消费者受限归并 | DATA-003 |
 | DATA-005 | `BLOCKED` | M1 | 服务轨迹和工作台组合查询 | DATA-004 |
 | DATA-006 | `BLOCKED` | M1 | 官方数据全量导入验收和标签泄漏门禁 | DATA-005 |
@@ -713,7 +713,14 @@ CustomerServiceOpenApiContractTest
 - **验收标准**：官方文件能完成解析预览；测试中搜索所有规范化输出 JSON 不含 `scene_` 和目标标签；29 个缺图引用被标为缺失而非成功解析。
 - **回滚方式**：回滚 parser 代码和版本；尚未确认的 staging 可过期清理，不能改写已确认来源事实。
 - **Definition of Done**：正反夹具覆盖所有 Sheet，错误包含 sheet/row/field，敏感值在日志和错误报告中脱敏。
-- **执行证据**：待填写。
+- **执行证据**：
+  - 执行者：Claude（连续执行会话）
+  - 分支：`main`
+  - 开始/结束：2026-07-26 23:20 / 23:55 (+08:00)
+  - 提交：`DATA-002: add competition workbook parser with label deny-list and masking`
+  - 验证命令与结果：`CompetitionWorkbookParserTest` 14 用例（POI 内存合成脱敏夹具，不提交任何真实数据文件）：deny-list 丢弃 scene_major/scene_minor/is_target_buyer_message/category、前导零订单号经 DataFormatter 保留、MISSING_MEDIA 计数、重复来源键与空消息告警、非法时间阻断（含 sheet/row 定位）、Asia/Shanghai 固定时区、会话由消息流派生（计数与时间跨度）、链接去重、支付宝账号/实名脱敏、未知列告警、不良反应工单 typed 字段、非 OOXML/超大小拒绝、parserVersion 固定。`OfficialWorkbookParserSmokeTest`（@Tag external，仅 `HMDP_CS_SOURCE_ROOT` 存在时本地运行）验证官方 workbook：138 会话、998 消息、112 别名、113 订单、80 工单、29 缺失媒体、0 阻断。
+  - 迁移结果：无迁移。
+  - 偏差/后续任务：官方数据中 3 条预售订单付款时间带“（定金）”注记——parser 按前缀时间解析并产生 `ANNOTATED_DATETIME` warning（非阻断），已记录在案；解析输出为 Java 11 兼容 typed row 类（`ImportRows`），非 sealed 层次；别名 sourceScope 归并粒度为 chat sheet 级（同脱敏昵称=1 别名，与官方 112 计数一致）。
 
 ### DATA-003 dry-run、错误报告和确认导入 API
 
