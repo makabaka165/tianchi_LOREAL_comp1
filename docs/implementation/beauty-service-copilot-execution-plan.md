@@ -291,9 +291,9 @@ BASE-001 -> BASE-003 -> ARCH-001 -> DATA-001 -> DATA-002 -> DATA-003
 | BASE-001 | `DONE` | M0 | 固定代码、数据和测试基线 | 无 |
 | BASE-002 | `DONE` | M0 | competition profile、Feature Flag 和降级配置 | BASE-001 |
 | BASE-003 | `DONE` | M0 | 建立不依赖 AI 领域包的客服 scope 权限入口 | BASE-001 |
-| ARCH-001 | `READY` | M0 | 用 ArchUnit 固化四上下文依赖方向 | BASE-003 |
+| ARCH-001 | `DONE` | M0 | 用 ArchUnit 固化四上下文依赖方向 | BASE-003 |
 | CONTRACT-001 | `DONE` | M0 | 冻结 API、错误码、双层输出和风险枚举 | BASE-001 |
-| DATA-001 | `BLOCKED` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
+| DATA-001 | `READY` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
 | DATA-002 | `BLOCKED` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
 | DATA-003 | `BLOCKED` | M1 | dry-run、错误报告和确认导入 API | DATA-002 |
 | DATA-004 | `BLOCKED` | M1 | 幂等提交、来源链接和消费者受限归并 | DATA-003 |
@@ -606,7 +606,14 @@ CustomerServiceOpenApiContractTest
 - **验收标准**：每条规则有可理解的失败信息；新增客服实现无法绕过边界；没有通过宽泛 `ignoreDependency` 掩盖问题。
 - **回滚方式**：不得为通过测试删除规则；只能回滚造成错误依赖的实现。若规则本身错误，先修订上下文地图并记录原因。
 - **Definition of Done**：架构测试进入 `mvn clean verify`，后续包骨架只能按规则扩展。
-- **执行证据**：待填写。
+- **执行证据**：
+  - 执行者：Claude（连续执行会话）
+  - 分支：`main`
+  - 开始/结束：2026-07-26 22:35 / 22:50 (+08:00)
+  - 提交：`ARCH-001: enforce customer service context boundaries with ArchUnit`
+  - 验证命令与结果：`CustomerServiceModuleBoundaryTest` 13 条规则通过（ai 不依赖三上下文、servicedata/riskops 零外部上下文依赖、riskops.domain 纯净、serviceassist 只用对方 application 公开面、四包不用 ai.domain.security、不碰 legacy mapper/entity、api 不进 infrastructure、security.customer 中立、三上下文切片无环）；`AiModuleBoundaryTest` 回归通过。按步骤 7 用临时违规类（serviceassist 引 AiPermission）验证规则确实失败后移除。
+  - 迁移结果：无迁移。
+  - 偏差/后续任务：servicedata/riskops 尚为空包，相关规则使用 `allowEmptyShould(true)`，首个类出现即生效；serviceassist、security.customer 已有真实类被规则实际分析；无需调整 `AiModuleBoundaryTest` 允许集合（ai -> security.customer 属技术共享基础设施且未被禁止）。
 
 ### CONTRACT-001 冻结 API、错误码和双层输出契约
 
