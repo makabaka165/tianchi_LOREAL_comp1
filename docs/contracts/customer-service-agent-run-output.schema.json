@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/customer-service-agent-run-output-v1.json",
+  "title": "Customer Service Agent Run Output Envelope V1",
+  "description": "Outer AgentRunOutput envelope produced by the agent platform for the beauty-service-copilot agent. The business payload lives at blocks[0].data and is owned by the serviceassist context (customer-service-assistance-output.schema.json). This schema is the agent version's output_schema; it must never duplicate business field definitions.",
+  "type": "object",
+  "required": [
+    "blocks"
+  ],
+  "properties": {
+    "answer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 8000
+    },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 8000
+          },
+          "data": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "citations": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 64
+    },
+    "artifacts": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 16
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "warnings": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      }
+    },
+    "status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "description": "blocks[0].data carries the CustomerServiceAssistanceV1 payload with the frozen contract version (draft-07 tuple form: array items applies per position, later blocks stay unconstrained). Full business validation against customer-service-assistance-output.schema.json happens in the serviceassist completion processor; the envelope only pins the extraction location and contract version.",
+      "properties": {
+        "blocks": {
+          "items": [
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "data"
+              ],
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "contractVersion"
+                  ],
+                  "properties": {
+                    "contractVersion": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

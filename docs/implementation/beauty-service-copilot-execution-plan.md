@@ -292,7 +292,7 @@ BASE-001 -> BASE-003 -> ARCH-001 -> DATA-001 -> DATA-002 -> DATA-003
 | BASE-002 | `DONE` | M0 | competition profile、Feature Flag 和降级配置 | BASE-001 |
 | BASE-003 | `DONE` | M0 | 建立不依赖 AI 领域包的客服 scope 权限入口 | BASE-001 |
 | ARCH-001 | `READY` | M0 | 用 ArchUnit 固化四上下文依赖方向 | BASE-003 |
-| CONTRACT-001 | `READY` | M0 | 冻结 API、错误码、双层输出和风险枚举 | BASE-001 |
+| CONTRACT-001 | `DONE` | M0 | 冻结 API、错误码、双层输出和风险枚举 | BASE-001 |
 | DATA-001 | `BLOCKED` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
 | DATA-002 | `BLOCKED` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
 | DATA-003 | `BLOCKED` | M1 | dry-run、错误报告和确认导入 API | DATA-002 |
@@ -639,7 +639,14 @@ CustomerServiceOpenApiContractTest
 - **验收标准**：业务 Schema 不能直接作为 Agent 外层 Schema；正例可通过、缺证据/额外字段/非法动作反例必失败；前后端枚举一致。
 - **回滚方式**：在没有实现消费者前可整体回滚；一旦进入共享分支，破坏性变化必须新增 `contractVersion`，不能静默改 v1。
 - **Definition of Done**：Schema、OpenAPI、错误码和测试进入 CI，所有后续任务引用版本 `1.0`。
-- **执行证据**：待填写。
+- **执行证据**：
+  - 执行者：Claude（连续执行会话）
+  - 分支：`main`
+  - 开始/结束：2026-07-26 22:05 / 22:35 (+08:00)
+  - 提交：`CONTRACT-001: freeze customer service API, error codes and two-layer output contract`
+  - 验证命令与结果：`npx @redocly/cli@1.25.5 lint docs/api/openapi.yaml` 0 error（184 个 warning 均为基线遗留风格项，如缺 operationId）；`CustomerServiceSchemaContractTest` 14 用例（业务 Schema 正例 + 缺证据/空 riskSignal 证据/额外字段（scene_major）/非法动作码/未要求人工确认反例；外层信封正例 + 缺 blocks/错误 contractVersion/首块缺 data 反例 + 信封不得复制业务字段断言；输入 Schema 正例 + 标签透传/缺必填反例）；`CustomerServiceOpenApiContractTest` 9 用例（16 条冻结路由、风险枚举与业务 Schema 逐值一致、CS_* 错误码存在且编号族正确、202+可空 agentRunId、风险命令均带 expectedVersion、全部路由要求 scope headers、未来客服 Controller 自动纳入契约扫描）；`OpenApiControllerContractTest` 回归通过。
+  - 迁移结果：无迁移。
+  - 偏差/后续任务：外层信封 Schema 采用 draft-07 数组式 `items` 定位 blocks[0]（不跨文件 `$ref`，业务校验由 ASSIST-004 的严格 guard 执行）；修复基线 `SessionBootstrapResponse.defaultScope` 的 nullable-无-type 规范错误；`info.version` 1.2.0 -> 1.3.0。
 
 ## 9. M1 任务卡：服务数据
 

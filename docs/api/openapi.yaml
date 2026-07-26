@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AI Dianping Agent Platform API
-  version: 1.2.0
+  version: 1.3.0
 servers:
   - url: http://localhost:8081
 security:
@@ -317,6 +317,297 @@ paths:
     parameters: [ { $ref: '#/components/parameters/IdPath' }, { $ref: '#/components/parameters/LeftPath' }, { $ref: '#/components/parameters/RightPath' } ]
     get: { summary: Diff workflow versions, responses: { '200': { $ref: '#/components/responses/Success' } } }
 
+  # ---------------------------------------------------------------------------
+  # Customer service (beauty service copilot). Contract version 1.0 - frozen by
+  # CONTRACT-001. Every route requires bearer auth plus X-Tenant-Id/X-Workspace-Id
+  # and a cs:* permission; error codes use the CS_* section of ErrorCode.
+  # ---------------------------------------------------------------------------
+  /api/v1/customer-service/imports/preview:
+    post:
+      summary: Upload workbook and create a dry-run import preview
+      description: Requires cs:data:import. Parses into staging only; no business facts are written before confirm.
+      parameters:
+        - { $ref: '#/components/parameters/TenantHeader' }
+        - { $ref: '#/components/parameters/WorkspaceHeader' }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: Preview result with counts, warnings and confirmability
+          content: { application/json: { schema: { $ref: '#/components/schemas/CsImportBatch' } } }
+        '422':
+          description: CS_IMPORT_VALIDATION_FAILED
+          content: { application/json: { schema: { $ref: '#/components/schemas/AiError' } } }
+  /api/v1/customer-service/imports/{batchId}:
+    parameters:
+      - { $ref: '#/components/parameters/BatchIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    get:
+      summary: Get import batch status and counts
+      responses:
+        '200':
+          description: Batch state
+          content: { application/json: { schema: { $ref: '#/components/schemas/CsImportBatch' } } }
+  /api/v1/customer-service/imports/{batchId}/errors:
+    parameters:
+      - { $ref: '#/components/parameters/BatchIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    get:
+      summary: Page masked validation errors of an import batch
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200':
+          description: Error page (values are masked; no raw PII)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/PageResponse' }
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/CsImportError' }
+  /api/v1/customer-service/imports/{batchId}/confirm:
+    parameters:
+      - { $ref: '#/components/parameters/BatchIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    post:
+      summary: Confirm a previewed batch into service data facts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsImportConfirmRequest' }
+      responses:
+        '200':
+          description: Idempotent commit summary
+          content: { application/json: { schema: { $ref: '#/components/schemas/CsImportCommitResult' } } }
+        '409':
+          description: CS_IMPORT_CONFLICT (hash/parserVersion/status/TTL mismatch)
+          content: { application/json: { schema: { $ref: '#/components/schemas/AiError' } } }
+
+  /api/v1/customer-service/conversations:
+    get:
+      summary: List service conversations for the workbench queue
+      description: Requires cs:workspace:read.
+      parameters:
+        - { $ref: '#/components/parameters/TenantHeader' }
+        - { $ref: '#/components/parameters/WorkspaceHeader' }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: queue, in: query, schema: { type: string } }
+        - { name: riskSeverity, in: query, schema: { $ref: '#/components/schemas/CsRiskSeverity' } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Conversation queue page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CsConversationSummary' }
+                  nextCursor: { type: string, nullable: true }
+  /api/v1/customer-service/conversations/{conversationId}/workspace:
+    parameters:
+      - { $ref: '#/components/parameters/ConversationIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    get:
+      summary: Composite workbench view of one conversation
+      description: >
+        Typed read-only composition: conversation, ordered messages, consumer journey,
+        order snapshots (array), service cases (array), active risk alerts, media
+        evidence status and a stable factsVersion. Every fact carries evidence refs.
+      responses:
+        '200':
+          description: Workspace view
+          content: { application/json: { schema: { $ref: '#/components/schemas/CsConversationWorkspace' } } }
+  /api/v1/customer-service/conversations/{conversationId}/assistance-requests:
+    parameters:
+      - { $ref: '#/components/parameters/ConversationIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    post:
+      summary: Create an assistance request over an immutable context snapshot
+      description: >
+        Requires cs:assist:request. Returns 202; the agent run may bind after the
+        response (agentRunId can be null). Repeated posts for the same conversation
+        and factsVersion reuse the active request.
+      responses:
+        '202':
+          description: Assistance request accepted
+          content: { application/json: { schema: { $ref: '#/components/schemas/CsAssistanceRequestCreated' } } }
+        '409':
+          description: CS_ASSISTANCE_CONFLICT
+          content: { application/json: { schema: { $ref: '#/components/schemas/AiError' } } }
+  /api/v1/customer-service/assistance-requests/{requestId}:
+    parameters:
+      - { $ref: '#/components/parameters/RequestIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    get:
+      summary: Get assistance request status and materialized suggestion
+      responses:
+        '200':
+          description: Request state (never exposes model chain-of-thought)
+          content: { application/json: { schema: { $ref: '#/components/schemas/CsAssistanceRequest' } } }
+  /api/v1/customer-service/suggestions/{suggestionId}/decisions:
+    parameters:
+      - { $ref: '#/components/parameters/SuggestionIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    post:
+      summary: Record the single human decision for a suggestion
+      description: >
+        Requires cs:suggestion:decide. ACCEPT_WITH_EDIT requires finalText; ACCEPT and
+        REJECT forbid it. Recording a decision never sends messages or mutates orders,
+        cases or risk state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsSuggestionDecisionRequest' }
+      responses:
+        '200':
+          description: Decision recorded
+          content: { application/json: { schema: { $ref: '#/components/schemas/CsSuggestionDecisionResponse' } } }
+        '409':
+          description: CS_SUGGESTION_STALE or CS_SUGGESTION_DECIDED
+          content: { application/json: { schema: { $ref: '#/components/schemas/AiError' } } }
+
+  /api/v1/customer-service/risk-alerts:
+    get:
+      summary: List risk alerts with filters
+      description: Requires cs:risk:read.
+      parameters:
+        - { $ref: '#/components/parameters/TenantHeader' }
+        - { $ref: '#/components/parameters/WorkspaceHeader' }
+        - { name: severity, in: query, schema: { $ref: '#/components/schemas/CsRiskSeverity' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/CsRiskAlertStatus' } }
+        - { name: riskType, in: query, schema: { $ref: '#/components/schemas/CsRiskType' } }
+        - { name: assigneeId, in: query, schema: { type: string } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { name: consumerId, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Risk alert page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CsRiskAlertSummary' }
+                  nextCursor: { type: string, nullable: true }
+  /api/v1/customer-service/risk-alerts/{alertId}:
+    parameters:
+      - { $ref: '#/components/parameters/AlertIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    get:
+      summary: Risk alert detail with signals and disposition timeline
+      responses:
+        '200':
+          description: Alert detail (never exposes raw model responses)
+          content: { application/json: { schema: { $ref: '#/components/schemas/CsRiskAlertDetail' } } }
+  /api/v1/customer-service/risk-alerts/{alertId}/acknowledge:
+    parameters:
+      - { $ref: '#/components/parameters/AlertIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    post:
+      summary: Acknowledge an open alert
+      description: Requires cs:risk:manage. All risk commands are optimistic-locked via expectedVersion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsRiskCommandRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/CsRiskCommandSuccess' }
+        '409': { $ref: '#/components/responses/CsRiskCommandConflict' }
+  /api/v1/customer-service/risk-alerts/{alertId}/assign:
+    parameters:
+      - { $ref: '#/components/parameters/AlertIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    post:
+      summary: Assign an alert to an operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsRiskAssignRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/CsRiskCommandSuccess' }
+        '409': { $ref: '#/components/responses/CsRiskCommandConflict' }
+  /api/v1/customer-service/risk-alerts/{alertId}/start:
+    parameters:
+      - { $ref: '#/components/parameters/AlertIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    post:
+      summary: Start working on an acknowledged alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsRiskCommandRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/CsRiskCommandSuccess' }
+        '409': { $ref: '#/components/responses/CsRiskCommandConflict' }
+  /api/v1/customer-service/risk-alerts/{alertId}/resolve:
+    parameters:
+      - { $ref: '#/components/parameters/AlertIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    post:
+      summary: Resolve an in-progress alert (reason required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsRiskReasonedCommandRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/CsRiskCommandSuccess' }
+        '409': { $ref: '#/components/responses/CsRiskCommandConflict' }
+  /api/v1/customer-service/risk-alerts/{alertId}/dismiss:
+    parameters:
+      - { $ref: '#/components/parameters/AlertIdPath' }
+      - { $ref: '#/components/parameters/TenantHeader' }
+      - { $ref: '#/components/parameters/WorkspaceHeader' }
+    post:
+      summary: Dismiss an open or acknowledged alert (reason required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsRiskReasonedCommandRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/CsRiskCommandSuccess' }
+        '409': { $ref: '#/components/responses/CsRiskCommandConflict' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -332,10 +623,21 @@ components:
     VersionPath: { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
     LeftPath: { name: left, in: path, required: true, schema: { type: integer, minimum: 1 } }
     RightPath: { name: right, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    BatchIdPath: { name: batchId, in: path, required: true, schema: { type: string, maxLength: 64 } }
+    ConversationIdPath: { name: conversationId, in: path, required: true, schema: { type: string, maxLength: 64 } }
+    RequestIdPath: { name: requestId, in: path, required: true, schema: { type: string, maxLength: 64 } }
+    SuggestionIdPath: { name: suggestionId, in: path, required: true, schema: { type: string, maxLength: 64 } }
+    AlertIdPath: { name: alertId, in: path, required: true, schema: { type: string, maxLength: 64 } }
   responses:
     Success:
       description: Successful response
       content: { application/json: { schema: { type: object } } }
+    CsRiskCommandSuccess:
+      description: Command applied; returns new version and disposition id
+      content: { application/json: { schema: { $ref: '#/components/schemas/CsRiskCommandResponse' } } }
+    CsRiskCommandConflict:
+      description: CS_RISK_VERSION_CONFLICT or CS_RISK_INVALID_TRANSITION
+      content: { application/json: { schema: { $ref: '#/components/schemas/AiError' } } }
   schemas:
     AiError:
       type: object
@@ -402,6 +704,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/SessionMembership' }
         defaultScope:
+          type: object
           allOf:
             - { $ref: '#/components/schemas/SessionScope' }
           nullable: true
@@ -479,3 +782,292 @@ components:
         agentDefinitionId: { type: string }
         agentCode: { type: string }
         agentVersion: { type: integer, minimum: 1 }
+
+    # --- Customer service enums (contract v1.0, frozen) -----------------------
+    CsRiskType:
+      type: string
+      enum: [ADVERSE_REACTION, EMOTION_ESCALATION, REPEAT_CONTACT, REFUND_ANOMALY, LOGISTICS_EXCEPTION, MISSING_OR_WRONG_ITEM, PROMISE_DISPUTE, PUBLIC_OPINION_RISK]
+    CsRiskSeverity:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+    CsRiskAlertStatus:
+      type: string
+      enum: [OPEN, ACKNOWLEDGED, IN_PROGRESS, RESOLVED, DISMISSED]
+    CsAssistanceRequestStatus:
+      type: string
+      enum: [CREATED, RUN_QUEUED, RUNNING, COMPLETED, FAILED, FALLBACK_COMPLETED]
+    CsSuggestionStatus:
+      type: string
+      enum: [ACTIVE, STALE, EXPIRED]
+    CsGenerationMode:
+      type: string
+      enum: [LIVE, DETERMINISTIC_FALLBACK, DEMO_FIXTURE]
+    CsDecisionType:
+      type: string
+      enum: [ACCEPT, ACCEPT_WITH_EDIT, REJECT]
+    CsImportBatchStatus:
+      type: string
+      enum: [PREVIEWING, READY_TO_CONFIRM, REJECTED, CONFIRMING, CONFIRMED, CANCELLED, EXPIRED]
+
+    # --- Customer service payloads --------------------------------------------
+    CsImportCounts:
+      type: object
+      description: Record counts by type; all keys optional so new record types stay compatible
+      additionalProperties: { type: integer, minimum: 0 }
+    CsImportBatch:
+      type: object
+      required: [batchId, status, sourceSha256, parserVersion, counts, warningCount, blockingErrorCount, confirmable]
+      properties:
+        batchId: { type: string }
+        status: { $ref: '#/components/schemas/CsImportBatchStatus' }
+        fileName: { type: string }
+        sourceSha256: { type: string, minLength: 64, maxLength: 64 }
+        parserVersion: { type: string }
+        counts: { $ref: '#/components/schemas/CsImportCounts' }
+        warningCount: { type: integer, minimum: 0 }
+        blockingErrorCount: { type: integer, minimum: 0 }
+        confirmable: { type: boolean }
+        warnings:
+          type: array
+          maxItems: 50
+          items: { type: string, maxLength: 500 }
+        createdAt: { type: string, format: date-time }
+        confirmedAt: { type: string, format: date-time, nullable: true }
+    CsImportError:
+      type: object
+      required: [sheet, row, errorCode, message]
+      properties:
+        sheet: { type: string }
+        row: { type: integer, minimum: 0 }
+        field: { type: string, nullable: true }
+        errorCode: { type: string }
+        maskedValue: { type: string, nullable: true, description: Sensitive values are always masked }
+        message: { type: string }
+    CsImportConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSourceSha256, expectedParserVersion]
+      properties:
+        expectedSourceSha256: { type: string, minLength: 64, maxLength: 64 }
+        expectedParserVersion: { type: string }
+        warningsReviewed: { type: boolean, default: false, description: Must be true when the batch has warnings }
+    CsImportCommitResult:
+      type: object
+      required: [batchId, status, created, updated, skipped]
+      properties:
+        batchId: { type: string }
+        status: { $ref: '#/components/schemas/CsImportBatchStatus' }
+        created: { $ref: '#/components/schemas/CsImportCounts' }
+        updated: { $ref: '#/components/schemas/CsImportCounts' }
+        skipped: { $ref: '#/components/schemas/CsImportCounts' }
+
+    CsEvidenceRef:
+      type: string
+      pattern: '^[A-Za-z0-9._:-]{1,128}$'
+      description: Stable evidence reference such as msg:<id>, order:<snapshotId>, case:<id>, alert:<id>
+    CsConversationSummary:
+      type: object
+      required: [conversationId, status, lastMessageAt]
+      properties:
+        conversationId: { type: string }
+        consumerAlias: { type: string, description: "Display alias, masked when account-like" }
+        status: { type: string }
+        queue: { type: string, nullable: true }
+        riskSeverity: { $ref: '#/components/schemas/CsRiskSeverity' }
+        waitingSince: { type: string, format: date-time, nullable: true }
+        lastMessageAt: { type: string, format: date-time }
+        repeatContact: { type: boolean, nullable: true }
+    CsConversationWorkspace:
+      type: object
+      required: [conversation, messages, consumerJourney, orderSnapshots, serviceCases, activeRiskAlerts, factsVersion]
+      properties:
+        conversation: { $ref: '#/components/schemas/CsConversationSummary' }
+        messages:
+          type: array
+          items:
+            type: object
+            required: [messageId, senderRole, content, sourceSequence, evidenceRef]
+            properties:
+              messageId: { type: string }
+              senderRole: { type: string }
+              content: { type: string }
+              sentAt: { type: string, format: date-time, nullable: true }
+              sourceSequence: { type: integer }
+              mediaStatus: { type: string, nullable: true, description: e.g. MISSING_MEDIA when only a path exists }
+              evidenceRef: { $ref: '#/components/schemas/CsEvidenceRef' }
+        consumerJourney:
+          type: object
+          description: Cross-conversation service trajectory summary for the same limited-merge consumer
+        orderSnapshots:
+          type: array
+          description: Always an array; one conversation may link to many orders
+          items:
+            type: object
+            required: [snapshotId, orderNo, evidenceRef]
+            properties:
+              snapshotId: { type: string }
+              orderNo: { type: string, description: Business numbers are strings end to end }
+              status: { type: string, nullable: true }
+              evidenceRef: { $ref: '#/components/schemas/CsEvidenceRef' }
+        serviceCases:
+          type: array
+          items:
+            type: object
+            required: [caseId, caseNo, evidenceRef]
+            properties:
+              caseId: { type: string }
+              caseNo: { type: string }
+              caseType: { type: string, nullable: true }
+              status: { type: string, nullable: true }
+              evidenceRef: { $ref: '#/components/schemas/CsEvidenceRef' }
+        activeRiskAlerts:
+          type: array
+          items: { $ref: '#/components/schemas/CsRiskAlertSummary' }
+        mediaEvidenceStatus: { type: object, nullable: true }
+        factsVersion: { type: string, description: Stable hash of visible facts; identical facts yield identical versions }
+
+    CsAssistanceRequestCreated:
+      type: object
+      required: [requestId, snapshotId, conversationId, status, generationMode]
+      properties:
+        requestId: { type: string }
+        snapshotId: { type: string }
+        conversationId: { type: string }
+        status: { $ref: '#/components/schemas/CsAssistanceRequestStatus' }
+        agentRunId: { type: string, nullable: true, description: Null until the run binds after commit }
+        generationMode: { $ref: '#/components/schemas/CsGenerationMode' }
+    CsSuggestion:
+      type: object
+      required: [suggestionId, requestId, contractVersion, status, generationMode, payload]
+      properties:
+        suggestionId: { type: string }
+        requestId: { type: string }
+        contractVersion: { type: string, enum: ['1.0'] }
+        status: { $ref: '#/components/schemas/CsSuggestionStatus' }
+        generationMode: { $ref: '#/components/schemas/CsGenerationMode' }
+        payload:
+          type: object
+          description: CustomerServiceAssistanceV1 payload (docs/contracts/customer-service-assistance-output.schema.json)
+        replyDraft: { type: string }
+        expectedContextHash: { type: string }
+        createdAt: { type: string, format: date-time }
+    CsAssistanceRequest:
+      type: object
+      required: [requestId, snapshotId, conversationId, status, generationMode]
+      properties:
+        requestId: { type: string }
+        snapshotId: { type: string }
+        conversationId: { type: string }
+        status: { $ref: '#/components/schemas/CsAssistanceRequestStatus' }
+        agentRunId: { type: string, nullable: true }
+        generationMode: { $ref: '#/components/schemas/CsGenerationMode' }
+        suggestion: { $ref: '#/components/schemas/CsSuggestion' }
+        failureCode: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CsSuggestionDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [type, expectedContextHash]
+      properties:
+        type: { $ref: '#/components/schemas/CsDecisionType' }
+        expectedContextHash: { type: string, description: Context hash the operator saw; mismatch yields CS_SUGGESTION_STALE }
+        finalText: { type: string, maxLength: 2000, description: "Required for ACCEPT_WITH_EDIT, forbidden otherwise" }
+        reason: { type: string, maxLength: 500, nullable: true }
+      oneOf:
+        - properties:
+            type: { enum: [ACCEPT_WITH_EDIT] }
+          required: [type, expectedContextHash, finalText]
+        - properties:
+            type: { enum: [ACCEPT, REJECT] }
+          not: { required: [finalText] }
+    CsSuggestionDecisionResponse:
+      type: object
+      required: [decisionId, type, decidedAt, suggestionStatus]
+      properties:
+        decisionId: { type: string }
+        type: { $ref: '#/components/schemas/CsDecisionType' }
+        decidedAt: { type: string, format: date-time }
+        suggestionStatus: { $ref: '#/components/schemas/CsSuggestionStatus' }
+
+    CsRiskAlertSummary:
+      type: object
+      required: [alertId, riskType, severity, status, version, openedAt]
+      properties:
+        alertId: { type: string }
+        riskType: { $ref: '#/components/schemas/CsRiskType' }
+        severity: { $ref: '#/components/schemas/CsRiskSeverity' }
+        status: { $ref: '#/components/schemas/CsRiskAlertStatus' }
+        consumerId: { type: string, nullable: true }
+        conversationId: { type: string, nullable: true }
+        summary: { type: string, nullable: true }
+        assigneeId: { type: string, nullable: true }
+        slaDueAt: { type: string, format: date-time, nullable: true }
+        overdue: { type: boolean, nullable: true }
+        version: { type: integer, minimum: 0 }
+        openedAt: { type: string, format: date-time }
+        relatedAlertId: { type: string, nullable: true }
+    CsRiskAlertDetail:
+      allOf:
+        - { $ref: '#/components/schemas/CsRiskAlertSummary' }
+        - type: object
+          required: [signals, dispositions]
+          properties:
+            signals:
+              type: array
+              items:
+                type: object
+                required: [signalId, riskType, evidenceRefs]
+                properties:
+                  signalId: { type: string }
+                  riskType: { $ref: '#/components/schemas/CsRiskType' }
+                  modelSeverity: { $ref: '#/components/schemas/CsRiskSeverity' }
+                  ruleSeverityFloor: { $ref: '#/components/schemas/CsRiskSeverity' }
+                  confidence: { type: number, minimum: 0, maximum: 1, nullable: true }
+                  summary: { type: string, nullable: true }
+                  evidenceRefs:
+                    type: array
+                    minItems: 1
+                    items: { $ref: '#/components/schemas/CsEvidenceRef' }
+            dispositions:
+              type: array
+              description: Append-only timeline; entries are never rewritten
+              items:
+                type: object
+                required: [dispositionId, action, actor, occurredAt]
+                properties:
+                  dispositionId: { type: string }
+                  action: { type: string }
+                  actor: { type: string, description: "SYSTEM_RULE, AGENT or HUMAN:<userId>" }
+                  reason: { type: string, nullable: true }
+                  fromStatus: { $ref: '#/components/schemas/CsRiskAlertStatus' }
+                  toStatus: { $ref: '#/components/schemas/CsRiskAlertStatus' }
+                  occurredAt: { type: string, format: date-time }
+    CsRiskCommandRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+    CsRiskAssignRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, assigneeId]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        assigneeId: { type: string, maxLength: 64 }
+    CsRiskReasonedCommandRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    CsRiskCommandResponse:
+      type: object
+      required: [alertId, status, version, dispositionId]
+      properties:
+        alertId: { type: string }
+        status: { $ref: '#/components/schemas/CsRiskAlertStatus' }
+        version: { type: integer, minimum: 0 }
+        dispositionId: { type: string }

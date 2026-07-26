@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/customer-service-assistance-input-v1.json",
+  "title": "Customer Service Assistance Input V1",
+  "description": "Input payload for the beauty-service-copilot agent run. Carries only stable identifiers plus an optional locale: all facts are pulled by tools from the immutable context snapshot, and evaluation labels (scene_major/scene_minor/target markers) or free-form pass-through maps are forbidden by additionalProperties=false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "conversationId",
+    "contextSnapshotId",
+    "assistanceRequestId"
+  ],
+  "properties": {
+    "conversationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9._:-]{1,64}$"
+    },
+    "contextSnapshotId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9._:-]{1,64}$"
+    },
+    "assistanceRequestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9._:-]{1,64}$"
+    },
+    "locale": {
+      "type": "string",
+      "enum": [
+        "zh-CN",
+        "zh-TW",
+        "en-US"
+      ],
+      "default": "zh-CN"
+    }
+  }
+}
