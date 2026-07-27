@@ -7,9 +7,11 @@
 | 字段 | 值 |
 | --- | --- |
 | 状态 | `ACTIVE` |
-| 计划版本 | `1.0` |
+| 计划版本 | `1.1` |
 | 建立日期 | `2026-07-26` |
-| 代码基线 | `main@39ee0b3a259a` |
+| 最近复核 | `2026-07-27` |
+| 当前代码基线 | `main@11f136b`（DATA-002） |
+| 当前执行阶段 | M1 进行中；`DATA-002=DONE`，`DATA-003`、`RISK-001=READY` |
 | 目标仓库 | `https://github.com/makabaka165/tianchi_LOREAL_comp1.git` |
 | 第一条演示链路 | 会话 `S00082`，不良反应风险场景 |
 | 默认技术路线 | Java 模块化单体负责业务、编排和运行时；Python 只用于离线实验或可替换的无状态 AI 能力 |
@@ -461,7 +463,7 @@ CustomerServiceOpenApiContractTest
 
 ### BASE-001 固定代码、数据和测试基线
 
-- **状态**：`READY`
+- **状态**：`DONE`
 - **目标**：证明下一阶段是在可重复的代码和赛题数据基线上开始，避免把既有失败误判为新实现回归。
 - **前置依赖**：无。
 - **现有代码/资产**：`main@39ee0b3a259a`；根目录外三份赛题材料；`mvn clean verify`、前端四项检查和四条 GitHub Actions 工作流。
@@ -502,7 +504,7 @@ CustomerServiceOpenApiContractTest
 
 ### BASE-002 competition profile、Feature Flag 和降级配置
 
-- **状态**：`BLOCKED`
+- **状态**：`DONE`
 - **目标**：以独立 profile 启用客服垂直能力，不改变 `local`、`test`、`prod` 的默认行为，并使现场演示可显式选择实时模型或降级链路。
 - **前置依赖**：BASE-001。
 - **现有代码/资产**：`application.yaml`、`application-local.yaml`、`application-test.yaml`；现有 `hmdp.ai.*` 条件配置；`docker-compose.ai.yml`。
@@ -554,7 +556,7 @@ CustomerServiceOpenApiContractTest
 
 ### BASE-003 建立客服 scope 权限入口
 
-- **状态**：`BLOCKED`
+- **状态**：`DONE`
 - **目标**：复用登录、租户和 workspace 事实，但不让 `servicedata` 或 `riskops` 依赖 `com.hmdp.ai.domain.security`。
 - **前置依赖**：BASE-001。
 - **现有代码/资产**：`AiPermissionInterceptor` 覆盖 `/api/v1/**`；`AiAuthorizationService` 只识别 `AiPermission`；`SessionBootstrapApplicationService` 从 `ai_workspace_member` 返回 scope。
@@ -588,7 +590,7 @@ CustomerServiceOpenApiContractTest
 
 ### ARCH-001 用 ArchUnit 固化四上下文边界
 
-- **状态**：`BLOCKED`
+- **状态**：`DONE`
 - **目标**：把上下文地图从文档约定变成编译期自动门禁。
 - **前置依赖**：BASE-003。
 - **现有代码/资产**：`src/test/java/com/hmdp/arch/AiModuleBoundaryTest.java` 已限制 AI 包依赖和循环。
@@ -617,7 +619,7 @@ CustomerServiceOpenApiContractTest
 
 ### CONTRACT-001 冻结 API、错误码和双层输出契约
 
-- **状态**：`BLOCKED`
+- **状态**：`DONE`
 - **目标**：让后端、前端、Workflow Seed、评测和演示围绕同一组可验证契约开发。
 - **前置依赖**：BASE-001。
 - **现有代码/资产**：客服业务输出 Schema 已存在；OpenAPI 尚无客服路径；`ErrorCode` 有 AI 段；Runtime 外层为 `AgentRunOutput`。
@@ -659,7 +661,7 @@ CustomerServiceOpenApiContractTest
 
 ### DATA-001 服务数据 DDL、领域模型和 Repository 端口
 
-- **状态**：`BLOCKED`
+- **状态**：`DONE`
 - **目标**：建立只拥有来源事实的服务数据上下文，并为导入和查询提供稳定模型。
 - **前置依赖**：ARCH-001、CONTRACT-001。
 - **现有代码/资产**：无 `com.hmdp.servicedata`；Apache POI 已在 `pom.xml`；现有 MySQL/Flyway/JdbcTemplate 可复用。
@@ -690,7 +692,7 @@ CustomerServiceOpenApiContractTest
 
 ### DATA-002 XLSX 解析、映射、校验和脱敏夹具
 
-- **状态**：`BLOCKED`
+- **状态**：`DONE`
 - **目标**：把官方 workbook 稳定转换为领域中间记录，同时在解析边界彻底丢弃评测标签。
 - **前置依赖**：DATA-001。
 - **现有代码/资产**：`ai.infrastructure.parser.XlsxDocumentParser` 是知识文档文本提取器，不适合领域导入；Apache POI `WorkbookFactory` 可复用。
@@ -721,10 +723,12 @@ CustomerServiceOpenApiContractTest
   - 验证命令与结果：`CompetitionWorkbookParserTest` 14 用例（POI 内存合成脱敏夹具，不提交任何真实数据文件）：deny-list 丢弃 scene_major/scene_minor/is_target_buyer_message/category、前导零订单号经 DataFormatter 保留、MISSING_MEDIA 计数、重复来源键与空消息告警、非法时间阻断（含 sheet/row 定位）、Asia/Shanghai 固定时区、会话由消息流派生（计数与时间跨度）、链接去重、支付宝账号/实名脱敏、未知列告警、不良反应工单 typed 字段、非 OOXML/超大小拒绝、parserVersion 固定。`OfficialWorkbookParserSmokeTest`（@Tag external，仅 `HMDP_CS_SOURCE_ROOT` 存在时本地运行）验证官方 workbook：138 会话、998 消息、112 别名、113 订单、80 工单、29 缺失媒体、0 阻断。
   - 迁移结果：无迁移。
   - 偏差/后续任务：官方数据中 3 条预售订单付款时间带“（定金）”注记——parser 按前缀时间解析并产生 `ANNOTATED_DATETIME` warning（非阻断），已记录在案；解析输出为 Java 11 兼容 typed row 类（`ImportRows`），非 sealed 层次；别名 sourceScope 归并粒度为 chat sheet 级（同脱敏昵称=1 别名，与官方 112 计数一致）。
+  - 2026-07-27 独立复核：设置 `HMDP_CS_SOURCE_ROOT=E:\tianchi_LOREAL\comp1` 后，`OfficialWorkbookParserSmokeTest` 实际执行 `1/1` 通过（非条件跳过）；`CompetitionWorkbookParserTest,CustomerServiceModuleBoundaryTest` 共 `27/27` 通过；`mvn clean verify` 共 `794/794` 通过；前端 lint、typecheck、`13/13` 测试和 production build 通过。
+  - 未关闭门禁：本机 Docker Desktop Linux engine 未启动，`full-integration` 中 Testcontainers 用例会被 `disabledWithoutDocker` 跳过，因此本次不把 Maven 的 profile 成功记作 M1 full-integration 通过；须在 Docker 可用后于 DATA-006/M1 退出前补跑并留证。
 
 ### DATA-003 dry-run、错误报告和确认导入 API
 
-- **状态**：`BLOCKED`
+- **状态**：`READY`
 - **目标**：让操作人员先看到可导入计数和错误，再显式确认，不允许上传即写正式事实表。
 - **前置依赖**：DATA-002。
 - **现有代码/资产**：Spring MVC multipart、客服 scope 权限入口、统一 Result/ErrorCode。
@@ -822,7 +826,7 @@ CustomerServiceOpenApiContractTest
 
 ### RISK-001 风险 DDL、领域模型和状态机
 
-- **状态**：`BLOCKED`
+- **状态**：`READY`
 - **目标**：建立独立于服务工单和模型 Run 的风险闭环聚合。
 - **前置依赖**：DATA-001。
 - **现有代码/资产**：风险词汇表和目标架构状态主路径；目前没有 `com.hmdp.riskops`。
@@ -1609,12 +1613,15 @@ npm run build
 
 ## 19. 下一执行入口
 
-下一位工程师或 Agent 不需要重新规划整体架构，直接执行 `BASE-001`：
+当前执行快照是 `main@11f136b`：M0 已完成，M1 已完成 DATA-001/002，但尚未完成导入 API、幂等提交、工作台查询和全量导入验收。下一位工程师或 Agent 不需要重新规划整体架构，主线直接执行 `DATA-003`：
 
-1. 读取本文件 0-8 节和 `BASE-001` 任务卡。
-2. 确认工作树和 `main@39ee0b3a259a` 的差异；若基线已前移，记录新 HEAD，但不得静默改数据 hash。
-3. 将 `BASE-001` 改为 `IN_PROGRESS`，创建 evidence 文档并运行全部基线命令。
-4. 只有 DoD 全部满足才标记 `DONE`，然后把 `BASE-002`、`BASE-003`、`CONTRACT-001` 置为 `READY`。
-5. 优先继续关键路径 `BASE-003 -> ARCH-001 -> DATA-001`；`BASE-002` 和 `CONTRACT-001` 可在明确无文件冲突时作为独立支线。
+1. 读取本文件 0-8 节、DATA-003 任务卡、DATA-002 执行证据，以及 OpenAPI 和客服 scope 权限契约；不要重新实现 parser。
+2. 确认工作树只包含已知改动，HEAD 不早于 `11f136b`，原始 XLSX SHA-256 仍与 0.1 节一致；原始赛题文件继续留在仓库外。
+3. 将 `DATA-003` 从 `READY` 改为 `IN_PROGRESS`，先用失败测试冻结 preview/get/errors/confirm、权限、scope、TTL、hash/parserVersion 冲突和“未确认不写正式事实表”的行为。
+4. 按任务卡实现 application 用例、staging 端口/JDBC adapter、Controller、DTO 和 OpenAPI 对齐；preview 与 confirm 分离，错误分页，日志和错误报告不得泄露原始敏感值。
+5. 最少执行 `git diff --check`、`mvn -DskipTests compile`、DATA-003 定向测试、`mvn clean verify`；Docker 可用时补跑 `mvn clean verify -Pfull-integration` 并确认 Testcontainers 用例没有跳过。
+6. 只有 DATA-003 DoD 全部满足且证据已写回任务卡，才提交并把 `DATA-004` 置为 `READY`。不得因为 DATA-002 已完成就宣称 M1 完成。
+
+`RISK-001` 也是 `READY`，但它不替代关键路径上的 DATA-003。单人连续执行优先 DATA-003；只有在独立分支、迁移序号和共享文件无冲突时，才可把 RISK-001 作为并行支线推进。
 
 本计划完成的定义不是“所有任务写了代码”，而是 `RELEASE-002=DONE`、M5 门禁全部通过、S00082 的实时与离线链路均可复现，并且每项答辩结论都有版本化证据。
