@@ -14,6 +14,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -140,7 +141,9 @@ class CompetitionWorkbookParserTest {
 
     @Test
     void duplicateSourceKeysAndEmptyMessagesBecomeWarnings() {
-        List<String> codes = result.getIssues().stream().map(ImportIssue::getErrorCode).toList();
+        List<String> codes = result.getIssues().stream()
+                .map(ImportIssue::getErrorCode)
+                .collect(Collectors.toList());
         assertThat(codes).contains("DUPLICATE_SOURCE_KEY", "EMPTY_MESSAGE");
         assertThat(result.getMessages())
                 .filteredOn(m -> "重复键".equals(m.content))
