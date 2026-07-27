@@ -385,8 +385,8 @@ paths:
       - { $ref: '#/components/parameters/TenantHeader' }
       - { $ref: '#/components/parameters/WorkspaceHeader' }
     post:
-      summary: Confirm a previewed batch for staged commit preparation
-      description: Requires cs:data:import. DATA-003 only moves an eligible batch to CONFIRMING; DATA-004 performs the idempotent fact commit.
+      summary: Confirm and atomically commit a previewed import batch
+      description: Requires cs:data:import. Atomically commits staged rows as idempotent source facts, then returns the final CONFIRMED state and commit counts.
       requestBody:
         required: true
         content:
@@ -394,7 +394,7 @@ paths:
             schema: { $ref: '#/components/schemas/CsImportConfirmRequest' }
       responses:
         '200':
-          description: Commit preparation accepted; created/updated/skipped remain zero until DATA-004
+          description: Atomic commit completed with typed created, updated and skipped counts
           content: { application/json: { schema: { $ref: '#/components/schemas/CsImportCommitResult' } } }
         '409':
           description: CS_IMPORT_CONFLICT (hash/parserVersion/status/TTL mismatch)

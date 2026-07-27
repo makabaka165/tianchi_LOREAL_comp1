@@ -23,12 +23,23 @@ public final class Conversation {
     private final Instant lastMessageAt;
     private final String contentHash;
     private final String importBatchId;
+    private final int version;
 
     public Conversation(String id, ScopeRef scope, String sourceSystem,
                         String sourceConversationId, String consumerId, String channel,
                         String status, Instant startedAt, Instant endedAt, int messageCount,
                         Instant firstMessageAt, Instant lastMessageAt, String contentHash,
                         String importBatchId) {
+        this(id, scope, sourceSystem, sourceConversationId, consumerId, channel, status,
+                startedAt, endedAt, messageCount, firstMessageAt, lastMessageAt, contentHash,
+                importBatchId, 0);
+    }
+
+    public Conversation(String id, ScopeRef scope, String sourceSystem,
+                        String sourceConversationId, String consumerId, String channel,
+                        String status, Instant startedAt, Instant endedAt, int messageCount,
+                        Instant firstMessageAt, Instant lastMessageAt, String contentHash,
+                        String importBatchId, int version) {
         this.id = ScopeRef.requireText(id, "id");
         this.scope = Objects.requireNonNull(scope, "scope");
         this.sourceSystem = ScopeRef.requireText(sourceSystem, "sourceSystem");
@@ -46,6 +57,10 @@ public final class Conversation {
         this.lastMessageAt = lastMessageAt;
         this.contentHash = contentHash;
         this.importBatchId = importBatchId;
+        if (version < 0) {
+            throw new IllegalArgumentException("version must not be negative");
+        }
+        this.version = version;
     }
 
     public String getId() {
@@ -102,5 +117,9 @@ public final class Conversation {
 
     public String getImportBatchId() {
         return importBatchId;
+    }
+
+    public int getVersion() {
+        return version;
     }
 }

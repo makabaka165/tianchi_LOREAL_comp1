@@ -193,6 +193,13 @@ class CustomerServiceOpenApiContractTest {
         Map<String, Object> error = (Map<String, Object>) schemas.get("CsImportError");
         assertThat((List<String>) error.get("required"))
                 .contains("sheet", "row", "errorCode", "severity", "message");
+
+        Map<String, Object> confirmPath = (Map<String, Object>) paths.get(
+                "/api/v1/customer-service/imports/{batchId}/confirm");
+        Map<String, Object> confirmPost = (Map<String, Object>) confirmPath.get("post");
+        assertThat(confirmPost.get("summary").toString()).contains("atomically commit");
+        assertThat(confirmPost.get("description").toString())
+                .contains("CONFIRMED").doesNotContain("DATA-003 only");
     }
 
     @Test

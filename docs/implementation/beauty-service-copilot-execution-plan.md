@@ -10,8 +10,9 @@
 | 计划版本 | `1.1` |
 | 建立日期 | `2026-07-26` |
 | 最近复核 | `2026-07-27` |
-| DATA-003 功能提交 | `DATA-003: add staged import preview and confirmation API`（本提交） |
-| 当前执行阶段 | M1 进行中；`DATA-003=DONE`，`DATA-004`、`RISK-001=READY` |
+| DATA-003 功能提交 | `c51a400 DATA-003: add staged import preview and confirmation API` |
+| DATA-004 功能提交 | `DATA-004: add idempotent service fact import commit`（本提交；实际 SHA 以 Git 历史为准） |
+| 当前执行阶段 | M1 进行中；`DATA-004=DONE`，`DATA-005`、`RISK-001=READY` |
 | 目标仓库 | `https://github.com/makabaka165/tianchi_LOREAL_comp1.git` |
 | 第一条演示链路 | 会话 `S00082`，不良反应风险场景 |
 | 默认技术路线 | Java 模块化单体负责业务、编排和运行时；Python 只用于离线实验或可替换的无状态 AI 能力 |
@@ -298,8 +299,8 @@ BASE-001 -> BASE-003 -> ARCH-001 -> DATA-001 -> DATA-002 -> DATA-003
 | DATA-001 | `DONE` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
 | DATA-002 | `DONE` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
 | DATA-003 | `DONE` | M1 | dry-run、错误报告和确认导入 API | DATA-002 |
-| DATA-004 | `READY` | M1 | 幂等提交、来源链接和消费者受限归并 | DATA-003 |
-| DATA-005 | `BLOCKED` | M1 | 服务轨迹和工作台组合查询 | DATA-004 |
+| DATA-004 | `DONE` | M1 | 幂等提交、来源链接和消费者受限归并 | DATA-003 |
+| DATA-005 | `READY` | M1 | 服务轨迹和工作台组合查询 | DATA-004 |
 | DATA-006 | `BLOCKED` | M1 | 官方数据全量导入验收和标签泄漏门禁 | DATA-005 |
 | RISK-001 | `READY` | M2/M3 | 风险信号、预警、处置记录 DDL 与状态机 | DATA-001 |
 | RISK-002 | `BLOCKED` | M2 | 确定性特征、风险策略和等级下限 | RISK-001, DATA-005 |
@@ -688,7 +689,7 @@ CustomerServiceOpenApiContractTest
   - 提交：`DATA-001: add service data schema, domain model and repository ports`
   - 验证命令与结果：`ImportBatchTest`（11 用例状态机：preview->ready/rejected、确认哈希/parser/TTL/告警审阅/并发确认冲突、CONFIRMING 失败回退、终态不可再转移）、`ServiceDataDomainModelTest`（9 用例：前导零字符串编号、contentHash 校验、消息需正文或媒体、MISSING_MEDIA、别名 NFKC 归一化哈希、链接/会话/工单不变量）、`CustomerServiceModuleBoundaryTest` 回归；`ServiceDataSchemaIntegrationTest`（7 用例：10 表存在且带 scope/audit 列、information_schema 无 scene%/target% 列、前导零 roundtrip、一会话多订单链接、别名唯一键、消息来源键唯一、ImportBatch 乐观锁与跨 workspace 读隔离）在全新容器完整迁移链上通过。
   - 迁移结果：`V20260726_02__customer_service_data_schema.sql` 建 10 张 `cs_data_*` 表；订单/工单为 append-only 版本化（scope+编号+content_hash 唯一）；`row_no` 规避 MySQL 8 保留字。
-  - 偏差/后续任务：Repository 端口中除 `ImportBatchRepository`（JDBC 已实现）外，事实写入端口聚合在 `ServiceFactRepositories` 中，DATA-004 落地各 JDBC writer 时再拆分；`cs_data_import_batch` 未对 (scope,hash) 建唯一键（历史批次允许多条），复用逻辑由 `findReusable` 承担。
+  - 偏差/后续任务：Repository 端口中除 `ImportBatchRepository`（JDBC 已实现）外，事实写入端口聚合在 `ServiceFactRepositories` 中，DATA-004 落地各 JDBC writer 时再拆分；`cs_data_import_batch` 未对 (scope,hash) 建唯一键（历史批次允许多条），复用逻辑由 `findReusable` 承担。后续兑现：DATA-004 已按事实类型拆分独立 Repository 端口并落地 JDBC adapter，原临时聚合端口已删除。
 
 ### DATA-002 XLSX 解析、映射、校验和脱敏夹具
 
@@ -758,7 +759,7 @@ CustomerServiceOpenApiContractTest
 
 ### DATA-004 幂等提交、来源链接和消费者受限归并
 
-- **状态**：`READY`
+- **状态**：`DONE`
 - **目标**：把 staging 原子提交到服务数据表，重复导入不产生重复事实，并明确消费者别名归并的可信边界。
 - **前置依赖**：DATA-003。
 - **现有代码/资产**：DATA-001 Repository 端口和 DATA-003 confirm 用例骨架。
@@ -773,15 +774,22 @@ CustomerServiceOpenApiContractTest
   6. links 独立写入；悬空链接阻断确认或进入明确 quarantine，不能静默丢弃。
   7. 事务提交后发布 `ServiceFactsImported`；监听器失败不回滚已经确认的来源事实，后续可按 batch 补偿。
   8. 完成后清理 staging payload，仅保留 batch 摘要和脱敏错误。
-- **测试命令**：`mvn -Dtest=ServiceDataImportIntegrationTest test -Pfull-integration`。
+- **测试命令**：`mvn "-Dit.test=ServiceDataImportIntegrationTest" verify -Pfull-integration`。
 - **验收标准**：同文件连续确认/重新上传后所有正式计数不增加；内容更新产生版本而非覆盖；事件可重放且不含 PII 原文。
 - **回滚方式**：导入事实采用 batch 可追踪；比赛环境可通过显式“禁用 batch 投影”追加迁移/管理命令恢复，不执行无审计物理删除。
 - **Definition of Done**：并发 confirm、重复文件、部分失败回滚和更新快照测试全部通过。
-- **执行证据**：待填写。
+- **执行证据**：
+  - 执行者：Codex（连续执行会话）
+  - 分支：`main`
+  - 开始/结束：2026-07-27 15:13 / 17:30 (+08:00)
+  - 提交：`DATA-004: add idempotent service fact import commit`（本提交；实际 SHA 以 Git 历史为准）
+  - 验证命令与结果：先把 confirm 预期改为最终 `CONFIRMED`，旧实现按预期失败（actual `CONFIRMING`）；`git diff --check` 通过；`mvn -DskipTests compile` BUILD SUCCESS；DATA-004 application/commit/controller/serialization/event/OpenAPI/module-boundary 定向回归 `56/56` 通过；`mvn clean verify` 的 Surefire XML 精确汇总 `828/828`，0 failure/error/skipped；设置 `HMDP_CS_SOURCE_ROOT=E:\tianchi_LOREAL\comp1` 后 `OfficialWorkbookParserSmokeTest` 实际执行 `1/1`，0 skipped；Redocly 1.25.5 为 0 error、184 个既有 warning；Docker client/server 29.5.2 可用，`mvn clean verify -Pfull-integration` 再次通过 `828/828` 单元测试和 `38/38` Failsafe 集成测试，均为 0 failure/error/skipped，其中 `ServiceDataImportIntegrationTest` 为真实 MySQL `6/6`、0 skipped。
+  - 迁移结果：现有已发布 `V20260726_02__customer_service_data_schema.sql` 完整满足 batch commit counts、confirmed actor/time、事实唯一键、append-only 版本和 source link 契约；未修改已发布 Flyway，未新增迁移。
+  - 偏差/后续任务：confirm 现在在单事务内以 batch version 抢占 `CONFIRMING`，按 consumer/alias -> conversation -> message/order/case -> link 幂等提交，成功后才转 `CONFIRMED`、记录 created/updated/skipped、清理 staging，并在提交后发布不含 PII 的 `ServiceFactsImported`；消息来源键内容冲突、悬空或 quarantined link 会阻断并完整回滚。消费者自动归并仅限 `sourceSystem + sourceScope + normalizedAliasHash`，跨来源/scope 不归并。未修改前端、未新增依赖。Docker Desktop daemon 已恢复并完成真实全量集成，不再沿用 DATA-003 的环境限制。Security workflow 的既有 13 个 CVSS>=9 运行时依赖仍按安全基线单独跟踪，本任务未改变依赖树，也不把该平台债务记为 DATA-004 回归。
 
 ### DATA-005 服务轨迹和工作台组合查询
 
-- **状态**：`BLOCKED`
+- **状态**：`READY`
 - **目标**：通过类型化只读接口返回当前会话及消费者服务轨迹，不让工作台跨上下文直接联表写模型。
 - **前置依赖**：DATA-004。
 - **现有代码/资产**：目标 API `GET .../workspace`；service data 聚合和 source links。
@@ -795,7 +803,7 @@ CustomerServiceOpenApiContractTest
   5. 服务轨迹可包含同 consumer 的历史会话摘要，但默认不返回不必要的完整历史原文。
   6. 工作台 Query Service 后续可组合 risk/assist 公开读 DTO；此任务先返回对应空区块，不跨包访问其 Repository。
   7. 为 S00082 添加不含标签的固定查询契约夹具。
-- **测试命令**：`mvn -Dtest=ServiceJourneyQueryIntegrationTest,CustomerServiceOpenApiContractTest test -Pfull-integration`。
+- **测试命令**：`mvn "-Dtest=CustomerServiceOpenApiContractTest" test`；`mvn "-Dit.test=ServiceJourneyQueryIntegrationTest" verify -Pfull-integration`。
 - **验收标准**：S00082 所有显示事实都有证据 ref；SQL 带 scope；一对多返回正确；查询 DTO 中无 ORM 类型和 arbitrary detail JSON。
 - **回滚方式**：关闭 workspace read route；数据不受影响。
 - **Definition of Done**：列表和详情契约、分页、scope 隔离、查询计划和证据完整性测试通过。
@@ -1621,17 +1629,17 @@ npm run build
 
 ## 19. 下一执行入口
 
-当前功能完成点是 `DATA-003`（提交 `DATA-003: add staged import preview and confirmation API`）：M0 已完成，M1 已完成 DATA-001/002/003；preview 只写 batch/staging/error，confirm 只把合格 batch 推进到 `CONFIRMING`，尚未实现正式事实表幂等提交、消费者归并、工作台查询或全量导入验收。下一位工程师或 Agent 不需要重新规划整体架构，主线直接执行 `DATA-004`：
+当前功能完成点是 `DATA-004`（提交 `DATA-004: add idempotent service fact import commit`）：M0 已完成，M1 已完成 DATA-001/002/003/004；preview 仍只写 batch/staging/error，confirm 现在原子提交正式来源事实并完成 `CONFIRMING -> CONFIRMED`，已具备消费者受限归并、来源链接、幂等/版本化写入、提交计数、staging 清理和事务后事件。工作台组合查询与官方数据全量导入验收尚未实现。下一位工程师或 Agent 不需要重新规划整体架构，主线直接执行 `DATA-005`：
 
-1. 读取本文件 0-8 节、DATA-004 任务卡、DATA-003 执行证据、ADR 0007、OpenAPI 和 DATA-001 schema；复用现有 `CONFIRMING` batch、typed staging payload 和 scope/乐观锁端口。
-2. 确认工作树干净、HEAD 包含 DATA-003 功能提交、原始赛题文件仍在仓库外；不得修改已发布 `V20260726_02`，schema 确有缺口时才追加更高版本迁移并记录理由。
-3. 将 `DATA-004` 从 `READY` 改为 `IN_PROGRESS`，先用失败集成测试冻结并发 confirm、相同内容 skipped、内容变化追加 snapshot/version、部分失败全回滚、消费者受限归并和事件不含 PII 的行为。
-4. 实现 staging 到正式事实表的单事务幂等提交，按 consumer/alias -> conversation -> message/order/case -> link 顺序写入；成功后才执行 `CONFIRMING -> CONFIRMED`、记录 commit counts/actor 并清理 staging payload。
-5. 最少执行 `git diff --check`、`mvn -DskipTests compile`、DATA-004 定向集成测试、`mvn clean verify` 和真实 Docker `mvn clean verify -Pfull-integration`；不得把 Testcontainers skipped 当成通过。
-6. 只有 DATA-004 DoD 全部满足且证据写回后，才把 `DATA-005` 置为 `READY`。M1 必须继续保持未完成，直到 DATA-006 和 M1 门禁全部满足。
+1. 读取本文件 0-8 节、DATA-005 任务卡、DATA-004 执行证据、ADR 0007、OpenAPI 和现有 service-data Repository；复用已提交的 conversation/message/order/case/source-link 事实和受限 consumer identity。
+2. 确认工作树干净、HEAD 包含 DATA-004 功能提交、原始赛题文件仍在仓库外；查询只读且全部带 tenant/workspace scope，不跨上下文直接写表。
+3. 将 `DATA-005` 从 `READY` 改为 `IN_PROGRESS`，先用失败契约/集成测试冻结 conversation list、workspace 组合、消息稳定排序、订单/工单数组、evidenceRef、factsVersion、分页 cursor 和跨 workspace 防枚举语义。
+4. 实现类型化 `ServiceJourneyQuery`、JDBC query adapter、workspace application service 和 Controller；不让 API/应用边界使用 `Map<String,Object>`，不提前实现 DATA-006 或风险运营逻辑。
+5. 最少执行 `git diff --check`、`mvn -DskipTests compile`、DATA-005 定向查询/Controller/OpenAPI/module-boundary 测试、`mvn clean verify` 和真实 Docker `mvn clean verify -Pfull-integration`。
+6. 只有 DATA-005 DoD 全部满足且证据写回后，才把 `DATA-006` 置为 `READY`。M1 必须继续保持未完成，直到 DATA-006 和 M1 门禁全部满足。
 
-`RISK-001` 仍是 `READY`，但它不替代关键路径上的 DATA-004。单人连续执行优先 DATA-004；只有在独立分支、迁移序号和共享文件无冲突时，才可把 RISK-001 作为并行支线推进。
+`RISK-001` 仍是 `READY`，但它不替代关键路径上的 DATA-005。单人连续执行优先 DATA-005；只有在独立分支、迁移序号和共享文件无冲突时，才可把 RISK-001 作为并行支线推进。
 
-平台 Security 门禁当前因既有运行时依赖基线阻塞，详见 `docs/implementation/evidence/security-baseline-20260727.md`。它不改变 DATA-004 的功能任务顺序，但必须作为独立安全工作流在 RELEASE-002 前关闭；不得为获得绿色状态而整体降低 CVSS 阈值或批量 suppression。
+平台 Security 门禁当前因既有运行时依赖基线阻塞，详见 `docs/implementation/evidence/security-baseline-20260727.md`。它不改变 DATA-005 的功能任务顺序，但必须作为独立安全工作流在 RELEASE-002 前关闭；不得为获得绿色状态而整体降低 CVSS 阈值或批量 suppression。
 
 本计划完成的定义不是“所有任务写了代码”，而是 `RELEASE-002=DONE`、M5 门禁全部通过、S00082 的实时与离线链路均可复现，并且每项答辩结论都有版本化证据。

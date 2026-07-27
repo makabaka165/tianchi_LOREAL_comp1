@@ -1,7 +1,9 @@
 package com.hmdp.servicedata.application.port.out;
 
 import com.hmdp.servicedata.application.contract.ServiceDataImportCounts;
+import com.hmdp.servicedata.application.contract.ServiceDataImportCommitSummary;
 import com.hmdp.servicedata.application.contract.ServiceDataImportErrorPage;
+import com.hmdp.servicedata.application.imports.StagedImportRows;
 import com.hmdp.servicedata.application.imports.WorkbookParseResult;
 import com.hmdp.servicedata.domain.model.ScopeRef;
 
@@ -14,4 +16,9 @@ public interface ImportStagingPort {
     ServiceDataImportCounts findCounts(ScopeRef scope, String batchId);
 
     ServiceDataImportErrorPage findErrors(ScopeRef scope, String batchId, int page, int size);
+
+    StagedImportRows loadForCommit(ScopeRef scope, String batchId);
+
+    void completeCommit(ScopeRef scope, String batchId,
+                        ServiceDataImportCommitSummary summary);
 }

@@ -24,11 +24,19 @@ public final class ConsumerAlias {
     private final String displayAlias;
     private final String normalizedAliasHash;
     private final String mergeConfidence;
+    private final String provenanceJson;
     private final String importBatchId;
 
     public ConsumerAlias(String id, ScopeRef scope, String consumerId, String sourceSystem,
                          String sourceScope, String displayAlias, String mergeConfidence,
                          String importBatchId) {
+        this(id, scope, consumerId, sourceSystem, sourceScope, displayAlias, mergeConfidence,
+                null, importBatchId);
+    }
+
+    public ConsumerAlias(String id, ScopeRef scope, String consumerId, String sourceSystem,
+                         String sourceScope, String displayAlias, String mergeConfidence,
+                         String provenanceJson, String importBatchId) {
         this.id = ScopeRef.requireText(id, "id");
         this.scope = Objects.requireNonNull(scope, "scope");
         this.consumerId = ScopeRef.requireText(consumerId, "consumerId");
@@ -38,6 +46,7 @@ public final class ConsumerAlias {
         this.normalizedAliasHash = normalizedHashOf(displayAlias);
         this.mergeConfidence = mergeConfidence == null || mergeConfidence.trim().isEmpty()
                 ? CONFIDENCE_LIMITED : mergeConfidence.trim();
+        this.provenanceJson = provenanceJson;
         this.importBatchId = importBatchId;
     }
 
@@ -91,6 +100,10 @@ public final class ConsumerAlias {
 
     public String getMergeConfidence() {
         return mergeConfidence;
+    }
+
+    public String getProvenanceJson() {
+        return provenanceJson;
     }
 
     public String getImportBatchId() {

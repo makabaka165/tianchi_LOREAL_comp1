@@ -136,7 +136,7 @@ class ServiceDataImportControllerTest {
     @Test
     void confirmRequiresAndForwardsAllOptimisticExpectations() throws Exception {
         when(confirm.confirm(any(), eq("batch-1"), any())).thenReturn(
-                new ServiceDataImportConfirmationView("batch-1", "CONFIRMING", 5,
+                new ServiceDataImportConfirmationView("batch-1", "CONFIRMED", 5,
                         ServiceDataImportCounts.empty(), ServiceDataImportCounts.empty(),
                         ServiceDataImportCounts.empty()));
         String request = "{\"expectedSourceSha256\":\"" + SHA
@@ -146,7 +146,7 @@ class ServiceDataImportControllerTest {
         mvc.perform(post("/api/v1/customer-service/imports/batch-1/confirm")
                         .contentType("application/json").content(request))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CONFIRMING"))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"))
                 .andExpect(jsonPath("$.version").value(5));
 
         ArgumentCaptor<ConfirmServiceDataImportCommand> command =

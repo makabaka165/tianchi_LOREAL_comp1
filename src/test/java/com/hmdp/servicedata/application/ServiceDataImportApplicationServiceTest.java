@@ -4,13 +4,16 @@ import com.hmdp.common.ErrorCode;
 import com.hmdp.exception.BusinessException;
 import com.hmdp.servicedata.application.contract.ConfirmServiceDataImportCommand;
 import com.hmdp.servicedata.application.contract.ServiceDataImportBatchView;
+import com.hmdp.servicedata.application.contract.ServiceDataImportCommitSummary;
 import com.hmdp.servicedata.application.contract.ServiceDataImportConfirmationView;
 import com.hmdp.servicedata.application.contract.ServiceDataImportCounts;
 import com.hmdp.servicedata.application.contract.ServiceDataImportErrorPage;
 import com.hmdp.servicedata.application.contract.ServiceDataImportScope;
 import com.hmdp.servicedata.application.contract.ServiceDataImportUpload;
+import com.hmdp.servicedata.application.event.ServiceFactsImported;
 import com.hmdp.servicedata.application.imports.ImportIssue;
 import com.hmdp.servicedata.application.imports.ImportRows;
+import com.hmdp.servicedata.application.imports.StagedImportRows;
 import com.hmdp.servicedata.application.imports.WorkbookParseResult;
 import com.hmdp.servicedata.application.port.out.ImportStagingPort;
 import com.hmdp.servicedata.application.port.out.WorkbookParserPort;
@@ -54,6 +57,8 @@ class ServiceDataImportApplicationServiceTest {
     private FakeStagingPort staging;
     private FakeWorkbookParser parser;
     private ServiceDataImportApplicationService service;
+    private ServiceDataImportCommitSummary commitSummary;
+    private List<ServiceFactsImported> publishedEvents;
     private byte[] workbook;
 
     @BeforeEach
@@ -61,6 +66,8 @@ class ServiceDataImportApplicationServiceTest {
         batches = new FakeBatchRepository();
         staging = new FakeStagingPort();
         parser = new FakeWorkbookParser(validResult());
+        commitSummary = ServiceDataImportCommitSummary.empty();
+        publishedEvents = new ArrayList<>();
         service = applicationService(true, true, 1024 * 1024, 24, NOW);
         workbook = minimalOoxmlWorkbook();
     }
@@ -94,7 +101,7 @@ class ServiceDataImportApplicationServiceTest {
     }
 
     @Test
-    void warningsRequireExplicitReviewAndSuccessfulConfirmOnlyPreparesCommit() {
+    void warningsRequireExplicitReviewAndSuccessfulConfirmCompletesCommit() {
         parser.result = resultWithIssues(issues -> issues.add(new ImportIssue(
                 "订单", 3, "付款时间", "ANNOTATED_DATETIME",
                 ImportErrorSeverity.WARNING, "定金***", "时间值带注记，已按前缀时间解析")));
@@ -102,15 +109,23 @@ class ServiceDataImportApplicationServiceTest {
 
         assertConflict(() -> service.confirm(SCOPE, preview.getBatchId(),
                 command(preview, false)));
+        commitSummary = new ServiceDataImportCommitSummary(
+                new ServiceDataImportCounts(0, 0, 1, 0, 0, 0, 0),
+                ServiceDataImportCounts.empty(), ServiceDataImportCounts.empty());
         ServiceDataImportConfirmationView confirmed = service.confirm(
                 SCOPE, preview.getBatchId(), command(preview, true));
 
-        assertThat(confirmed.getStatus()).isEqualTo("CONFIRMING");
-        assertThat(confirmed.getVersion()).isEqualTo(2);
-        assertThat(confirmed.getCreated().total()).isZero();
+        assertThat(confirmed.getStatus()).isEqualTo("CONFIRMED");
+        assertThat(confirmed.getVersion()).isEqualTo(3);
+        assertThat(confirmed.getCreated().getMessages()).isEqualTo(1);
         assertThat(confirmed.getUpdated().total()).isZero();
         assertThat(confirmed.getSkipped().total()).isZero();
-        assertThat(staging.formalFactWriteCount).isZero();
+        assertThat(staging.completedBatchIds).containsExactly(preview.getBatchId());
+        assertThat(publishedEvents).singleElement().satisfies(event -> {
+            assertThat(event.getBatchId()).isEqualTo(preview.getBatchId());
+            assertThat(event.getTenantId()).isEqualTo(SCOPE.getTenantId());
+            assertThat(event.getCreated().getMessages()).isEqualTo(1);
+        });
     }
 
     @Test
@@ -258,6 +273,7 @@ class ServiceDataImportApplicationServiceTest {
             boolean customerServiceEnabled, boolean importEnabled, long maxBytes, int ttlHours,
             Instant instant) {
         return new ServiceDataImportApplicationService(batches, staging, parser,
+                (scope, batchId, actor) -> commitSummary, publishedEvents::add,
                 customerServiceEnabled, importEnabled, maxBytes, ttlHours,
                 Clock.fixed(instant, ZoneOffset.UTC));
     }
@@ -386,7 +402,8 @@ class ServiceDataImportApplicationServiceTest {
             values.put(key, new ImportBatch(batch.getId(), batch.getScope(), batch.getFileName(),
                     batch.getSourceSha256(), batch.getParserVersion(), batch.getStatus(),
                     batch.getWarningCount(), batch.getBlockingErrorCount(),
-                    batch.getStagingExpiresAt(), expectedVersion + 1));
+                    batch.getStagingExpiresAt(), batch.getConfirmedAt(), batch.getConfirmedBy(),
+                    expectedVersion + 1));
             return true;
         }
 
@@ -399,6 +416,7 @@ class ServiceDataImportApplicationServiceTest {
         private final Map<String, ServiceDataImportCounts> counts = new HashMap<>();
         private final Map<String, List<ImportIssue>> issues = new HashMap<>();
         private final List<String> savedBatchIds = new ArrayList<>();
+        private final List<String> completedBatchIds = new ArrayList<>();
         private int formalFactWriteCount;
 
         @Override
@@ -424,6 +442,18 @@ class ServiceDataImportApplicationServiceTest {
             int to = Math.min(from + size, all.size());
             return ServiceDataImportErrorPage.fromIssues(all.subList(from, to),
                     all.size(), page, size);
+        }
+
+        @Override
+        public StagedImportRows loadForCommit(ScopeRef scope, String batchId) {
+            return new StagedImportRows();
+        }
+
+        @Override
+        public void completeCommit(ScopeRef scope, String batchId,
+                                   ServiceDataImportCommitSummary summary) {
+            // Preview counts remain available from the batch summary after payload cleanup.
+            completedBatchIds.add(batchId);
         }
 
         private static String key(ScopeRef scope, String id) {

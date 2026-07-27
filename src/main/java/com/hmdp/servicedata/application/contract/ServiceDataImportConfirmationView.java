@@ -2,7 +2,7 @@ package com.hmdp.servicedata.application.contract;
 
 import java.util.Objects;
 
-/** DATA-003 confirmation result. Fact counts stay zero until DATA-004 commits staging. */
+/** Final result of an atomic staged import confirmation. */
 public final class ServiceDataImportConfirmationView {
     private final String batchId;
     private final String status;

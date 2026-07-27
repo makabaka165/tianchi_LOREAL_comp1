@@ -10,16 +10,24 @@ public final class SourceLink {
     private final String fromId;
     private final String toRef;
     private final String confidence;
+    private final String provenanceJson;
     private final String importBatchId;
 
     public SourceLink(String id, ScopeRef scope, SourceLinkType linkType, String fromId,
                       String toRef, String confidence, String importBatchId) {
+        this(id, scope, linkType, fromId, toRef, confidence, null, importBatchId);
+    }
+
+    public SourceLink(String id, ScopeRef scope, SourceLinkType linkType, String fromId,
+                      String toRef, String confidence, String provenanceJson,
+                      String importBatchId) {
         this.id = ScopeRef.requireText(id, "id");
         this.scope = Objects.requireNonNull(scope, "scope");
         this.linkType = Objects.requireNonNull(linkType, "linkType");
         this.fromId = ScopeRef.requireText(fromId, "fromId");
         this.toRef = ScopeRef.requireText(toRef, "toRef");
         this.confidence = confidence;
+        this.provenanceJson = provenanceJson;
         this.importBatchId = importBatchId;
     }
 
@@ -45,6 +53,10 @@ public final class SourceLink {
 
     public String getConfidence() {
         return confidence;
+    }
+
+    public String getProvenanceJson() {
+        return provenanceJson;
     }
 
     public String getImportBatchId() {

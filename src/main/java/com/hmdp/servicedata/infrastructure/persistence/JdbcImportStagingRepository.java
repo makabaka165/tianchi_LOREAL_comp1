@@ -4,10 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hmdp.servicedata.application.contract.ServiceDataImportCounts;
+import com.hmdp.servicedata.application.contract.ServiceDataImportCommitSummary;
 import com.hmdp.servicedata.application.contract.ServiceDataImportErrorPage;
 import com.hmdp.servicedata.application.contract.ServiceDataImportErrorView;
 import com.hmdp.servicedata.application.imports.ImportIssue;
 import com.hmdp.servicedata.application.imports.ImportRows;
+import com.hmdp.servicedata.application.imports.StagedImportRows;
 import com.hmdp.servicedata.application.imports.WorkbookParseResult;
 import com.hmdp.servicedata.application.port.out.ImportStagingPort;
 import com.hmdp.servicedata.domain.model.RecordType;
@@ -125,6 +127,69 @@ public class JdbcImportStagingRepository implements ImportStagingPort {
                         rs.getString("message")),
                 scope.getTenantId(), scope.getWorkspaceId(), batchId, size, offset);
         return new ServiceDataImportErrorPage(items, total == null ? 0 : total, page, size);
+    }
+
+    @Override
+    public StagedImportRows loadForCommit(ScopeRef scope, String batchId) {
+        StagedImportRows result = new StagedImportRows();
+        jdbc.query("select record_type, payload_json from cs_data_import_staging "
+                        + "where tenant_id = ? and workspace_id = ? and batch_id = ? "
+                        + "order by record_type, sheet_name, row_no, id",
+                (rs, rowNum) -> {
+                    addStagedRow(result, RecordType.valueOf(rs.getString("record_type")),
+                            rs.getString("payload_json"));
+                    return rowNum;
+                },
+                scope.getTenantId(), scope.getWorkspaceId(), batchId);
+        return result;
+    }
+
+    @Override
+    public void completeCommit(ScopeRef scope, String batchId,
+                               ServiceDataImportCommitSummary summary) {
+        int updated = jdbc.update(
+                "update cs_data_import_batch set commit_counts_json = ? where id = ? "
+                        + "and tenant_id = ? and workspace_id = ? and status = 'CONFIRMED'",
+                json(summary), batchId, scope.getTenantId(), scope.getWorkspaceId());
+        if (updated != 1) {
+            throw new IllegalStateException("confirmed import batch disappeared before cleanup");
+        }
+        jdbc.update("delete from cs_data_import_staging where tenant_id = ? "
+                        + "and workspace_id = ? and batch_id = ?",
+                scope.getTenantId(), scope.getWorkspaceId(), batchId);
+    }
+
+    private void addStagedRow(StagedImportRows result, RecordType type, String payload) {
+        switch (type) {
+            case CONSUMER_ALIAS:
+                result.addAlias(read(payload, ImportRows.ConsumerAliasRow.class));
+                break;
+            case CONVERSATION:
+                result.addConversation(read(payload, ImportRows.ConversationRow.class));
+                break;
+            case MESSAGE:
+                result.addMessage(read(payload, ImportRows.MessageRow.class));
+                break;
+            case ORDER_SNAPSHOT:
+                result.addOrder(read(payload, ImportRows.OrderRow.class));
+                break;
+            case SERVICE_CASE:
+                result.addServiceCase(read(payload, ImportRows.ServiceCaseRow.class));
+                break;
+            case SOURCE_LINK:
+                result.addLink(read(payload, ImportRows.SourceLinkRow.class));
+                break;
+            default:
+                throw new IllegalStateException("unsupported staged record type");
+        }
+    }
+
+    private <T> T read(String payload, Class<T> type) {
+        try {
+            return mapper.readValue(payload, type);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("stored import staging payload is invalid", e);
+        }
     }
 
     private void stage(ScopeRef scope, String batchId, RecordType type, String sheet,

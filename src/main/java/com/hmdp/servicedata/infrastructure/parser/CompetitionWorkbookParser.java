@@ -6,6 +6,7 @@ import com.hmdp.servicedata.application.imports.WorkbookParseResult;
 import com.hmdp.servicedata.application.port.out.WorkbookParserPort;
 import com.hmdp.servicedata.domain.model.ImportErrorSeverity;
 import com.hmdp.servicedata.domain.model.Message;
+import com.hmdp.servicedata.domain.model.ServiceDataSource;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -52,7 +53,7 @@ import java.util.regex.Pattern;
 @Component
 public class CompetitionWorkbookParser implements WorkbookParserPort {
     public static final String PARSER_VERSION = "competition-workbook-v1";
-    public static final String SOURCE_SYSTEM = "competition-workbook";
+    public static final String SOURCE_SYSTEM = ServiceDataSource.COMPETITION_WORKBOOK;
 
     static final ZoneId SOURCE_ZONE = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter DATE_TIME =

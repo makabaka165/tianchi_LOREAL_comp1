@@ -4,6 +4,7 @@ import com.hmdp.common.ErrorCode;
 import com.hmdp.exception.BusinessException;
 import com.hmdp.servicedata.application.contract.ConfirmServiceDataImportCommand;
 import com.hmdp.servicedata.application.contract.ServiceDataImportBatchView;
+import com.hmdp.servicedata.application.contract.ServiceDataImportCommitSummary;
 import com.hmdp.servicedata.application.contract.ServiceDataImportConfirmationView;
 import com.hmdp.servicedata.application.contract.ServiceDataImportCounts;
 import com.hmdp.servicedata.application.contract.ServiceDataImportErrorPage;
@@ -11,11 +12,14 @@ import com.hmdp.servicedata.application.contract.ServiceDataImportScope;
 import com.hmdp.servicedata.application.contract.ServiceDataImportUpload;
 import com.hmdp.servicedata.application.imports.ImportIssue;
 import com.hmdp.servicedata.application.imports.WorkbookParseResult;
+import com.hmdp.servicedata.application.event.ServiceFactsImported;
+import com.hmdp.servicedata.application.port.in.CommitStagedServiceDataImportUseCase;
 import com.hmdp.servicedata.application.port.in.ConfirmServiceDataImportUseCase;
 import com.hmdp.servicedata.application.port.in.GetServiceDataImportBatchUseCase;
 import com.hmdp.servicedata.application.port.in.GetServiceDataImportErrorsUseCase;
 import com.hmdp.servicedata.application.port.in.PreviewServiceDataImportUseCase;
 import com.hmdp.servicedata.application.port.out.ImportStagingPort;
+import com.hmdp.servicedata.application.port.out.ServiceFactsImportedEventPublisher;
 import com.hmdp.servicedata.application.port.out.WorkbookParserPort;
 import com.hmdp.servicedata.domain.model.ImportBatch;
 import com.hmdp.servicedata.domain.model.ImportBatchStatus;
@@ -44,7 +48,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
 
-/** Coordinates dry-run staging and confirmation preconditions without writing facts. */
+/** Coordinates scoped workbook preview and atomic staging-to-fact confirmation. */
 @Service
 public class ServiceDataImportApplicationService implements PreviewServiceDataImportUseCase,
         GetServiceDataImportBatchUseCase, GetServiceDataImportErrorsUseCase,
@@ -58,6 +62,8 @@ public class ServiceDataImportApplicationService implements PreviewServiceDataIm
     private final ImportBatchRepository batches;
     private final ImportStagingPort staging;
     private final WorkbookParserPort parser;
+    private final CommitStagedServiceDataImportUseCase committer;
+    private final ServiceFactsImportedEventPublisher events;
     private final boolean enabled;
     private final long maxFileSizeBytes;
     private final Duration stagingTtl;
@@ -68,12 +74,14 @@ public class ServiceDataImportApplicationService implements PreviewServiceDataIm
             ImportBatchRepository batches,
             ImportStagingPort staging,
             WorkbookParserPort parser,
+            CommitStagedServiceDataImportUseCase committer,
+            ServiceFactsImportedEventPublisher events,
             @Value("${hmdp.customer-service.enabled:false}") boolean customerServiceEnabled,
             @Value("${hmdp.customer-service.import.enabled:false}") boolean importEnabled,
             @Value("${hmdp.customer-service.import.max-file-size-bytes:20971520}")
             long maxFileSizeBytes,
             @Value("${hmdp.customer-service.import.staging-ttl-hours:24}") int stagingTtlHours) {
-        this(batches, staging, parser, customerServiceEnabled, importEnabled,
+        this(batches, staging, parser, committer, events, customerServiceEnabled, importEnabled,
                 maxFileSizeBytes, stagingTtlHours, Clock.systemUTC());
     }
 
@@ -81,6 +89,8 @@ public class ServiceDataImportApplicationService implements PreviewServiceDataIm
             ImportBatchRepository batches,
             ImportStagingPort staging,
             WorkbookParserPort parser,
+            CommitStagedServiceDataImportUseCase committer,
+            ServiceFactsImportedEventPublisher events,
             boolean customerServiceEnabled,
             boolean importEnabled,
             long maxFileSizeBytes,
@@ -89,6 +99,8 @@ public class ServiceDataImportApplicationService implements PreviewServiceDataIm
         this.batches = Objects.requireNonNull(batches, "batches");
         this.staging = Objects.requireNonNull(staging, "staging");
         this.parser = Objects.requireNonNull(parser, "parser");
+        this.committer = Objects.requireNonNull(committer, "committer");
+        this.events = Objects.requireNonNull(events, "events");
         this.enabled = customerServiceEnabled && importEnabled;
         if (maxFileSizeBytes <= 0) {
             throw new IllegalArgumentException("maxFileSizeBytes must be positive");
@@ -172,10 +184,11 @@ public class ServiceDataImportApplicationService implements PreviewServiceDataIm
         ConfirmServiceDataImportCommand expected = Objects.requireNonNull(command, "command");
         ScopeRef scopeRef = scope.toScopeRef();
         ImportBatch batch = requireBatch(scopeRef, batchId);
+        Instant now = clock.instant();
         try {
             batch.beginConfirm(expected.getExpectedSourceSha256(),
                     expected.getExpectedParserVersion(), expected.getExpectedVersion(),
-                    expected.isWarningsReviewed(), clock.instant());
+                    expected.isWarningsReviewed(), now);
         } catch (ImportConflictException | IllegalStateException e) {
             throw conflict();
         }
@@ -183,9 +196,24 @@ public class ServiceDataImportApplicationService implements PreviewServiceDataIm
             throw conflict();
         }
         ImportBatch prepared = requireBatch(scopeRef, batchId);
-        ServiceDataImportCounts zero = ServiceDataImportCounts.empty();
-        return new ServiceDataImportConfirmationView(prepared.getId(),
-                prepared.getStatus().name(), prepared.getVersion(), zero, zero, zero);
+        ServiceDataImportCommitSummary summary;
+        try {
+            summary = committer.commit(scopeRef, batchId, scope.getActorId());
+        } catch (ServiceDataImportCommitException e) {
+            throw conflict();
+        }
+        prepared.completeConfirm(scope.getActorId(), now);
+        if (!batches.updateWithVersion(prepared, prepared.getVersion(), scope.getActorId())) {
+            throw conflict();
+        }
+        ImportBatch confirmed = requireBatch(scopeRef, batchId);
+        staging.completeCommit(scopeRef, batchId, summary);
+        events.publishAfterCommit(new ServiceFactsImported(batchId, scopeRef.getTenantId(),
+                scopeRef.getWorkspaceId(), summary.getCreated(), summary.getUpdated(),
+                summary.getSkipped(), now));
+        return new ServiceDataImportConfirmationView(confirmed.getId(),
+                confirmed.getStatus().name(), confirmed.getVersion(), summary.getCreated(),
+                summary.getUpdated(), summary.getSkipped());
     }
 
     private OptionalBatch reusable(ScopeRef scope, String sourceSha256, Instant now) {
