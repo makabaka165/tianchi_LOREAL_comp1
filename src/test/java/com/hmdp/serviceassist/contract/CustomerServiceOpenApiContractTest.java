@@ -177,6 +177,37 @@ class CustomerServiceOpenApiContractTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void importPreviewAndConfirmationExposeAllStagingPreconditions() {
+        Map<String, Object> batch = (Map<String, Object>) schemas.get("CsImportBatch");
+        assertThat((List<String>) batch.get("required")).contains(
+                "batchId", "sourceSha256", "parserVersion", "counts", "warningCount",
+                "errorCount", "blockingErrorCount", "confirmable", "status", "expiresAt",
+                "version");
+
+        Map<String, Object> confirm =
+                (Map<String, Object>) schemas.get("CsImportConfirmRequest");
+        assertThat((List<String>) confirm.get("required")).containsExactlyInAnyOrder(
+                "expectedSourceSha256", "expectedParserVersion", "expectedVersion");
+        assertThat(confirm.get("additionalProperties")).isEqualTo(Boolean.FALSE);
+
+        Map<String, Object> error = (Map<String, Object>) schemas.get("CsImportError");
+        assertThat((List<String>) error.get("required"))
+                .contains("sheet", "row", "errorCode", "severity", "message");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void importCountsAreTypedRatherThanAnArbitraryMap() {
+        Map<String, Object> counts = (Map<String, Object>) schemas.get("CsImportCounts");
+        assertThat(counts.get("additionalProperties")).isEqualTo(Boolean.FALSE);
+        Map<String, Object> properties = (Map<String, Object>) counts.get("properties");
+        assertThat(properties.keySet()).containsExactlyInAnyOrder(
+                "consumerAliases", "conversations", "messages", "orderSnapshots",
+                "serviceCases", "sourceLinks", "missingMedia");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void everyCustomerServiceRouteRequiresScopeHeaders() {
         for (String route : FROZEN_ROUTES) {
             Map<String, Object> pathItem = (Map<String, Object>) paths.get(route);

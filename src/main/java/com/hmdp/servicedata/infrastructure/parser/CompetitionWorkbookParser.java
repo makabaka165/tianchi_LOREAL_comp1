@@ -3,6 +3,7 @@ package com.hmdp.servicedata.infrastructure.parser;
 import com.hmdp.servicedata.application.imports.ImportIssue;
 import com.hmdp.servicedata.application.imports.ImportRows;
 import com.hmdp.servicedata.application.imports.WorkbookParseResult;
+import com.hmdp.servicedata.application.port.out.WorkbookParserPort;
 import com.hmdp.servicedata.domain.model.ImportErrorSeverity;
 import com.hmdp.servicedata.domain.model.Message;
 import org.apache.poi.ss.usermodel.Cell;
@@ -49,7 +50,7 @@ import java.util.regex.Pattern;
  *     can reach detail maps, issues or logs.
  */
 @Component
-public class CompetitionWorkbookParser {
+public class CompetitionWorkbookParser implements WorkbookParserPort {
     public static final String PARSER_VERSION = "competition-workbook-v1";
     public static final String SOURCE_SYSTEM = "competition-workbook";
 
@@ -79,6 +80,12 @@ public class CompetitionWorkbookParser {
 
     private final DataFormatter formatter = new DataFormatter(Locale.CHINA);
 
+    @Override
+    public String parserVersion() {
+        return PARSER_VERSION;
+    }
+
+    @Override
     public WorkbookParseResult parse(InputStream rawStream, long declaredSize) throws IOException {
         if (declaredSize > MAX_FILE_BYTES) {
             throw new IllegalArgumentException("workbook exceeds size limit");

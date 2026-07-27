@@ -10,8 +10,8 @@
 | 计划版本 | `1.1` |
 | 建立日期 | `2026-07-26` |
 | 最近复核 | `2026-07-27` |
-| DATA-002 功能提交 | `main@11f136b` |
-| 当前执行阶段 | M1 进行中；`DATA-002=DONE`，`DATA-003`、`RISK-001=READY` |
+| DATA-003 功能提交 | `DATA-003: add staged import preview and confirmation API`（本提交） |
+| 当前执行阶段 | M1 进行中；`DATA-003=DONE`，`DATA-004`、`RISK-001=READY` |
 | 目标仓库 | `https://github.com/makabaka165/tianchi_LOREAL_comp1.git` |
 | 第一条演示链路 | 会话 `S00082`，不良反应风险场景 |
 | 默认技术路线 | Java 模块化单体负责业务、编排和运行时；Python 只用于离线实验或可替换的无状态 AI 能力 |
@@ -297,8 +297,8 @@ BASE-001 -> BASE-003 -> ARCH-001 -> DATA-001 -> DATA-002 -> DATA-003
 | CONTRACT-001 | `DONE` | M0 | 冻结 API、错误码、双层输出和风险枚举 | BASE-001 |
 | DATA-001 | `DONE` | M1 | 服务数据 DDL、领域模型和 Repository 端口 | ARCH-001, CONTRACT-001 |
 | DATA-002 | `DONE` | M1 | XLSX 解析、字段映射、校验和脱敏夹具 | DATA-001 |
-| DATA-003 | `READY` | M1 | dry-run、错误报告和确认导入 API | DATA-002 |
-| DATA-004 | `BLOCKED` | M1 | 幂等提交、来源链接和消费者受限归并 | DATA-003 |
+| DATA-003 | `DONE` | M1 | dry-run、错误报告和确认导入 API | DATA-002 |
+| DATA-004 | `READY` | M1 | 幂等提交、来源链接和消费者受限归并 | DATA-003 |
 | DATA-005 | `BLOCKED` | M1 | 服务轨迹和工作台组合查询 | DATA-004 |
 | DATA-006 | `BLOCKED` | M1 | 官方数据全量导入验收和标签泄漏门禁 | DATA-005 |
 | RISK-001 | `READY` | M2/M3 | 风险信号、预警、处置记录 DDL 与状态机 | DATA-001 |
@@ -729,12 +729,12 @@ CustomerServiceOpenApiContractTest
 
 ### DATA-003 dry-run、错误报告和确认导入 API
 
-- **状态**：`READY`
+- **状态**：`DONE`
 - **目标**：让操作人员先看到可导入计数和错误，再显式确认，不允许上传即写正式事实表。
 - **前置依赖**：DATA-002。
 - **现有代码/资产**：Spring MVC multipart、客服 scope 权限入口、统一 Result/ErrorCode。
 - **新增/修改文件**：`ServiceDataImportController`、`PreviewServiceDataImportUseCase`、`ConfirmServiceDataImportUseCase`、DTO、JDBC staging adapter、OpenAPI 实现测试。
-- **数据库/API/事件契约**：preview 接收 multipart `file`，返回 batchId/hash/parserVersion/counts/warnings/errors/confirmable；confirm 请求携带 `expectedSourceSha256` 和 `expectedParserVersion`。
+- **数据库/API/事件契约**：preview 接收 multipart `file`，返回 batchId/hash/parserVersion/version/counts/warnings/errors/confirmable/TTL；confirm 请求携带 `expectedSourceSha256`、`expectedParserVersion`、`expectedVersion` 和 `warningsReviewed`。
 - **具体步骤**：
   1. Controller 使用 `cs:data:import`，限制 MIME、扩展名和请求大小；实际格式以 ZIP/OOXML 签名判断。
   2. 流式计算 SHA-256；在单一事务中创建 PREVIEWING batch、staging 和 error，完成后转 `READY_TO_CONFIRM` 或 `REJECTED`。
@@ -747,11 +747,18 @@ CustomerServiceOpenApiContractTest
 - **验收标准**：未 confirm 前正式事实表计数为零；跨 workspace 无法查看或确认 batch；过期/已确认/哈希不一致均稳定冲突。
 - **回滚方式**：关闭 import flag；将未完成 batch 标记 CANCELLED，等待 staging TTL 清理。
 - **Definition of Done**：preview/get/errors/confirm 契约和权限测试通过，前端可在不读取原始文件的情况下展示报告。
-- **执行证据**：待填写。
+- **执行证据**：
+  - 执行者：Codex（连续执行会话）
+  - 分支：`main`
+  - 开始/结束：2026-07-27 10:57 / 12:04 (+08:00)
+  - 提交：`DATA-003: add staged import preview and confirmation API`（本提交；实际 SHA 以 Git 历史为准）
+  - 验证命令与结果：官方 workbook SHA-256 为 `B5AC027E863C5580DAB39C8F459E4698D65E9FBEC29832C9915448F2087307B7`，与 0.1 节一致；`git diff --check` 通过；`mvn -DskipTests compile` BUILD SUCCESS；要求的 `ServiceDataImportApplicationServiceTest,CustomerServiceOpenApiContractTest,CustomerServiceModuleBoundaryTest` 共 `37/37` 通过；加入 Controller 和领域状态机的 DATA-003 扩展回归共 `56/56` 通过；`mvn clean verify` 共 `817/817` 通过，0 failure/error/skipped；设置 `HMDP_CS_SOURCE_ROOT=E:\tianchi_LOREAL\comp1` 后 `OfficialWorkbookParserSmokeTest` 实际执行 `1/1` 通过，非条件跳过；Redocly 1.25.5 校验 OpenAPI 为 0 error，184 个 warning 与既有基线一致。
+  - 迁移结果：复用已发布 `V20260726_02__customer_service_data_schema.sql` 的 batch/staging/error 表，无需且未新增迁移，未修改任何已发布 Flyway；新增 Testcontainers JDBC 集成用例验证同事务 staging、错误分页、scope 隔离、审计字段和正式事实表零写入。
+  - 偏差/后续任务：DATA-003 confirm 按任务边界仅执行 `READY_TO_CONFIRM -> CONFIRMING` 并返回全零 created/updated/skipped，未调用 `completeConfirm`、未写 `cs_data_consumer/conversation/message/order_snapshot/service_case/source_link`；幂等事实提交、消费者受限归并、事件和 staging 清理全部留给 DATA-004。未改前端、未新增依赖。Docker CLI 可用但本机 `dockerDesktopLinuxEngine` daemon 管道不存在，因此未运行本地 `mvn clean verify -Pfull-integration`，也不把 Testcontainers skipped 记为通过；推送后以 GitHub `Full integration verification` 核对真实 Docker 集成。Security workflow 的既有 13 个 CVSS>=9 运行时依赖仍按安全基线单独跟踪，不属于 DATA-003 回归。
 
 ### DATA-004 幂等提交、来源链接和消费者受限归并
 
-- **状态**：`BLOCKED`
+- **状态**：`READY`
 - **目标**：把 staging 原子提交到服务数据表，重复导入不产生重复事实，并明确消费者别名归并的可信边界。
 - **前置依赖**：DATA-003。
 - **现有代码/资产**：DATA-001 Repository 端口和 DATA-003 confirm 用例骨架。
@@ -1614,17 +1621,17 @@ npm run build
 
 ## 19. 下一执行入口
 
-当前功能完成点是 `DATA-002`（提交 `11f136b`）：M0 已完成，M1 已完成 DATA-001/002；后续提交只处理执行状态、Java 11 CI 兼容和安全证据，尚未实现导入 API、幂等提交、工作台查询或全量导入验收。下一位工程师或 Agent 不需要重新规划整体架构，主线直接执行 `DATA-003`：
+当前功能完成点是 `DATA-003`（提交 `DATA-003: add staged import preview and confirmation API`）：M0 已完成，M1 已完成 DATA-001/002/003；preview 只写 batch/staging/error，confirm 只把合格 batch 推进到 `CONFIRMING`，尚未实现正式事实表幂等提交、消费者归并、工作台查询或全量导入验收。下一位工程师或 Agent 不需要重新规划整体架构，主线直接执行 `DATA-004`：
 
-1. 读取本文件 0-8 节、DATA-003 任务卡、DATA-002 执行证据，以及 OpenAPI 和客服 scope 权限契约；不要重新实现 parser。
-2. 确认工作树只包含已知改动，HEAD 不早于 `11f136b`，原始 XLSX SHA-256 仍与 0.1 节一致；原始赛题文件继续留在仓库外。
-3. 将 `DATA-003` 从 `READY` 改为 `IN_PROGRESS`，先用失败测试冻结 preview/get/errors/confirm、权限、scope、TTL、hash/parserVersion 冲突和“未确认不写正式事实表”的行为。
-4. 按任务卡实现 application 用例、staging 端口/JDBC adapter、Controller、DTO 和 OpenAPI 对齐；preview 与 confirm 分离，错误分页，日志和错误报告不得泄露原始敏感值。
-5. 最少执行 `git diff --check`、`mvn -DskipTests compile`、DATA-003 定向测试、`mvn clean verify`；Docker 可用时补跑 `mvn clean verify -Pfull-integration` 并确认 Testcontainers 用例没有跳过。
-6. 只有 DATA-003 DoD 全部满足且证据已写回任务卡，才提交并把 `DATA-004` 置为 `READY`。不得因为 DATA-002 已完成就宣称 M1 完成。
+1. 读取本文件 0-8 节、DATA-004 任务卡、DATA-003 执行证据、ADR 0007、OpenAPI 和 DATA-001 schema；复用现有 `CONFIRMING` batch、typed staging payload 和 scope/乐观锁端口。
+2. 确认工作树干净、HEAD 包含 DATA-003 功能提交、原始赛题文件仍在仓库外；不得修改已发布 `V20260726_02`，schema 确有缺口时才追加更高版本迁移并记录理由。
+3. 将 `DATA-004` 从 `READY` 改为 `IN_PROGRESS`，先用失败集成测试冻结并发 confirm、相同内容 skipped、内容变化追加 snapshot/version、部分失败全回滚、消费者受限归并和事件不含 PII 的行为。
+4. 实现 staging 到正式事实表的单事务幂等提交，按 consumer/alias -> conversation -> message/order/case -> link 顺序写入；成功后才执行 `CONFIRMING -> CONFIRMED`、记录 commit counts/actor 并清理 staging payload。
+5. 最少执行 `git diff --check`、`mvn -DskipTests compile`、DATA-004 定向集成测试、`mvn clean verify` 和真实 Docker `mvn clean verify -Pfull-integration`；不得把 Testcontainers skipped 当成通过。
+6. 只有 DATA-004 DoD 全部满足且证据写回后，才把 `DATA-005` 置为 `READY`。M1 必须继续保持未完成，直到 DATA-006 和 M1 门禁全部满足。
 
-`RISK-001` 也是 `READY`，但它不替代关键路径上的 DATA-003。单人连续执行优先 DATA-003；只有在独立分支、迁移序号和共享文件无冲突时，才可把 RISK-001 作为并行支线推进。
+`RISK-001` 仍是 `READY`，但它不替代关键路径上的 DATA-004。单人连续执行优先 DATA-004；只有在独立分支、迁移序号和共享文件无冲突时，才可把 RISK-001 作为并行支线推进。
 
-平台 Security 门禁当前因既有运行时依赖基线阻塞，详见 `docs/implementation/evidence/security-baseline-20260727.md`。它不改变 DATA-003 的功能任务顺序，但必须作为独立安全工作流在 RELEASE-002 前关闭；不得为获得绿色状态而整体降低 CVSS 阈值或批量 suppression。
+平台 Security 门禁当前因既有运行时依赖基线阻塞，详见 `docs/implementation/evidence/security-baseline-20260727.md`。它不改变 DATA-004 的功能任务顺序，但必须作为独立安全工作流在 RELEASE-002 前关闭；不得为获得绿色状态而整体降低 CVSS 阈值或批量 suppression。
 
 本计划完成的定义不是“所有任务写了代码”，而是 `RELEASE-002=DONE`、M5 门禁全部通过、S00082 的实时与离线链路均可复现，并且每项答辩结论都有版本化证据。

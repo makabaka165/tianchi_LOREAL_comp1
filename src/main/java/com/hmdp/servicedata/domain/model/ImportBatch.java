@@ -26,6 +26,14 @@ public final class ImportBatch {
     public ImportBatch(String id, ScopeRef scope, String fileName, String sourceSha256,
                        String parserVersion, ImportBatchStatus status, int warningCount,
                        int blockingErrorCount, Instant stagingExpiresAt, int version) {
+        this(id, scope, fileName, sourceSha256, parserVersion, status, warningCount,
+                blockingErrorCount, stagingExpiresAt, null, null, version);
+    }
+
+    public ImportBatch(String id, ScopeRef scope, String fileName, String sourceSha256,
+                       String parserVersion, ImportBatchStatus status, int warningCount,
+                       int blockingErrorCount, Instant stagingExpiresAt, Instant confirmedAt,
+                       String confirmedBy, int version) {
         this.id = ScopeRef.requireText(id, "id");
         this.scope = Objects.requireNonNull(scope, "scope");
         this.fileName = ScopeRef.requireText(fileName, "fileName");
@@ -35,6 +43,8 @@ public final class ImportBatch {
         this.warningCount = requireNonNegative(warningCount, "warningCount");
         this.blockingErrorCount = requireNonNegative(blockingErrorCount, "blockingErrorCount");
         this.stagingExpiresAt = stagingExpiresAt;
+        this.confirmedAt = confirmedAt;
+        this.confirmedBy = confirmedBy;
         this.version = requireNonNegative(version, "version");
     }
 
@@ -82,7 +92,7 @@ public final class ImportBatch {
     }
 
     public boolean isStagingExpired(Instant now) {
-        return stagingExpiresAt != null && now.isAfter(stagingExpiresAt);
+        return stagingExpiresAt != null && !now.isBefore(stagingExpiresAt);
     }
 
     /**
@@ -91,6 +101,14 @@ public final class ImportBatch {
      */
     public void beginConfirm(String expectedSha256, String expectedParserVersion,
                              boolean warningsReviewed, Instant now) {
+        beginConfirm(expectedSha256, expectedParserVersion, version, warningsReviewed, now);
+    }
+
+    public void beginConfirm(String expectedSha256, String expectedParserVersion,
+                             int expectedVersion, boolean warningsReviewed, Instant now) {
+        if (version != expectedVersion) {
+            throw new ImportConflictException("batch version mismatch");
+        }
         if (!sourceSha256.equalsIgnoreCase(expectedSha256 == null ? "" : expectedSha256.trim())) {
             throw new ImportConflictException("source hash mismatch");
         }

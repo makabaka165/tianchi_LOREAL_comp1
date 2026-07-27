@@ -166,6 +166,10 @@ spring:
     default: local
   application:
     name: hmdp
+  servlet:
+    multipart:
+      max-file-size: ${HMDP_CS_MULTIPART_MAX_FILE_SIZE:20MB}
+      max-request-size: ${HMDP_CS_MULTIPART_MAX_REQUEST_SIZE:21MB}
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${DB_URL:jdbc:mysql://127.0.0.1:3307/hmdp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}

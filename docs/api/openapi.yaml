@@ -385,7 +385,8 @@ paths:
       - { $ref: '#/components/parameters/TenantHeader' }
       - { $ref: '#/components/parameters/WorkspaceHeader' }
     post:
-      summary: Confirm a previewed batch into service data facts
+      summary: Confirm a previewed batch for staged commit preparation
+      description: Requires cs:data:import. DATA-003 only moves an eligible batch to CONFIRMING; DATA-004 performs the idempotent fact commit.
       requestBody:
         required: true
         content:
@@ -393,7 +394,7 @@ paths:
             schema: { $ref: '#/components/schemas/CsImportConfirmRequest' }
       responses:
         '200':
-          description: Idempotent commit summary
+          description: Commit preparation accepted; created/updated/skipped remain zero until DATA-004
           content: { application/json: { schema: { $ref: '#/components/schemas/CsImportCommitResult' } } }
         '409':
           description: CS_IMPORT_CONFLICT (hash/parserVersion/status/TTL mismatch)
@@ -812,11 +813,19 @@ components:
     # --- Customer service payloads --------------------------------------------
     CsImportCounts:
       type: object
-      description: Record counts by type; all keys optional so new record types stay compatible
-      additionalProperties: { type: integer, minimum: 0 }
+      additionalProperties: false
+      required: [consumerAliases, conversations, messages, orderSnapshots, serviceCases, sourceLinks, missingMedia]
+      properties:
+        consumerAliases: { type: integer, minimum: 0 }
+        conversations: { type: integer, minimum: 0 }
+        messages: { type: integer, minimum: 0 }
+        orderSnapshots: { type: integer, minimum: 0 }
+        serviceCases: { type: integer, minimum: 0 }
+        sourceLinks: { type: integer, minimum: 0 }
+        missingMedia: { type: integer, minimum: 0 }
     CsImportBatch:
       type: object
-      required: [batchId, status, sourceSha256, parserVersion, counts, warningCount, blockingErrorCount, confirmable]
+      required: [batchId, status, sourceSha256, parserVersion, counts, warningCount, errorCount, blockingErrorCount, confirmable, expiresAt, version]
       properties:
         batchId: { type: string }
         status: { $ref: '#/components/schemas/CsImportBatchStatus' }
@@ -825,8 +834,11 @@ components:
         parserVersion: { type: string }
         counts: { $ref: '#/components/schemas/CsImportCounts' }
         warningCount: { type: integer, minimum: 0 }
+        errorCount: { type: integer, minimum: 0, description: Blocking errors; kept alongside blockingErrorCount for the DATA-003 operator contract }
         blockingErrorCount: { type: integer, minimum: 0 }
         confirmable: { type: boolean }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 0 }
         warnings:
           type: array
           maxItems: 50
@@ -835,28 +847,31 @@ components:
         confirmedAt: { type: string, format: date-time, nullable: true }
     CsImportError:
       type: object
-      required: [sheet, row, errorCode, message]
+      required: [sheet, row, errorCode, severity, message]
       properties:
         sheet: { type: string }
         row: { type: integer, minimum: 0 }
         field: { type: string, nullable: true }
         errorCode: { type: string }
+        severity: { type: string, enum: [WARNING, BLOCKING] }
         maskedValue: { type: string, nullable: true, description: Sensitive values are always masked }
         message: { type: string }
     CsImportConfirmRequest:
       type: object
       additionalProperties: false
-      required: [expectedSourceSha256, expectedParserVersion]
+      required: [expectedSourceSha256, expectedParserVersion, expectedVersion]
       properties:
         expectedSourceSha256: { type: string, minLength: 64, maxLength: 64 }
         expectedParserVersion: { type: string }
+        expectedVersion: { type: integer, minimum: 0 }
         warningsReviewed: { type: boolean, default: false, description: Must be true when the batch has warnings }
     CsImportCommitResult:
       type: object
-      required: [batchId, status, created, updated, skipped]
+      required: [batchId, status, version, created, updated, skipped]
       properties:
         batchId: { type: string }
         status: { $ref: '#/components/schemas/CsImportBatchStatus' }
+        version: { type: integer, minimum: 0 }
         created: { $ref: '#/components/schemas/CsImportCounts' }
         updated: { $ref: '#/components/schemas/CsImportCounts' }
         skipped: { $ref: '#/components/schemas/CsImportCounts' }

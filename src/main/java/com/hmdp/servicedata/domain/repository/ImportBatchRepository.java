@@ -8,7 +8,11 @@ import java.util.Optional;
 /** Persistence port for import batches. All reads are scope-checked. */
 public interface ImportBatchRepository {
 
-    void insert(ImportBatch batch);
+    default void insert(ImportBatch batch) {
+        insert(batch, "system");
+    }
+
+    void insert(ImportBatch batch, String actor);
 
     Optional<ImportBatch> findById(ScopeRef scope, String batchId);
 
@@ -24,5 +28,9 @@ public interface ImportBatchRepository {
      *
      * @return false when another writer already moved the batch
      */
-    boolean updateWithVersion(ImportBatch batch, int expectedVersion);
+    default boolean updateWithVersion(ImportBatch batch, int expectedVersion) {
+        return updateWithVersion(batch, expectedVersion, "system");
+    }
+
+    boolean updateWithVersion(ImportBatch batch, int expectedVersion, String actor);
 }

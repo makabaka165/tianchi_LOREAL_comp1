@@ -31,6 +31,8 @@ public class JdbcImportBatchRepository implements ImportBatchRepository {
             rs.getInt("warning_count"),
             rs.getInt("blocking_error_count"),
             toInstant(rs.getTimestamp("staging_expires_at")),
+            toInstant(rs.getTimestamp("confirmed_at")),
+            rs.getString("confirmed_by"),
             rs.getInt("version"));
 
     private static Instant toInstant(Timestamp timestamp) {
@@ -42,7 +44,8 @@ public class JdbcImportBatchRepository implements ImportBatchRepository {
     }
 
     @Override
-    public void insert(ImportBatch batch) {
+    public void insert(ImportBatch batch, String actor) {
+        String auditedActor = ScopeRef.requireText(actor, "actor");
         jdbc.update(
                 "insert into cs_data_import_batch (id, tenant_id, workspace_id, file_name, "
                         + "source_sha256, parser_version, status, warning_count, "
@@ -58,8 +61,8 @@ public class JdbcImportBatchRepository implements ImportBatchRepository {
                 batch.getWarningCount(),
                 batch.getBlockingErrorCount(),
                 toTimestamp(batch.getStagingExpiresAt()),
-                "system",
-                "system",
+                auditedActor,
+                auditedActor,
                 batch.getVersion());
     }
 
@@ -67,7 +70,8 @@ public class JdbcImportBatchRepository implements ImportBatchRepository {
     public Optional<ImportBatch> findById(ScopeRef scope, String batchId) {
         List<ImportBatch> rows = jdbc.query(
                 "select id, tenant_id, workspace_id, file_name, source_sha256, parser_version, "
-                        + "status, warning_count, blocking_error_count, staging_expires_at, version "
+                        + "status, warning_count, blocking_error_count, staging_expires_at, "
+                        + "confirmed_at, confirmed_by, version "
                         + "from cs_data_import_batch "
                         + "where id = ? and tenant_id = ? and workspace_id = ?",
                 MAPPER, batchId, scope.getTenantId(), scope.getWorkspaceId());
@@ -78,10 +82,13 @@ public class JdbcImportBatchRepository implements ImportBatchRepository {
     public Optional<ImportBatch> findReusable(ScopeRef scope, String sourceSha256, String parserVersion) {
         List<ImportBatch> rows = jdbc.query(
                 "select id, tenant_id, workspace_id, file_name, source_sha256, parser_version, "
-                        + "status, warning_count, blocking_error_count, staging_expires_at, version "
+                        + "status, warning_count, blocking_error_count, staging_expires_at, "
+                        + "confirmed_at, confirmed_by, version "
                         + "from cs_data_import_batch "
                         + "where tenant_id = ? and workspace_id = ? and source_sha256 = ? "
-                        + "and parser_version = ? and status in ('READY_TO_CONFIRM','CONFIRMED') "
+                        + "and parser_version = ? and (status = 'CONFIRMED' or "
+                        + "(status = 'READY_TO_CONFIRM' and (staging_expires_at is null "
+                        + "or staging_expires_at > current_timestamp(3)))) "
                         + "order by created_at desc limit 1",
                 MAPPER, scope.getTenantId(), scope.getWorkspaceId(),
                 sourceSha256, parserVersion);
@@ -89,7 +96,8 @@ public class JdbcImportBatchRepository implements ImportBatchRepository {
     }
 
     @Override
-    public boolean updateWithVersion(ImportBatch batch, int expectedVersion) {
+    public boolean updateWithVersion(ImportBatch batch, int expectedVersion, String actor) {
+        String auditedActor = ScopeRef.requireText(actor, "actor");
         int updated = jdbc.update(
                 "update cs_data_import_batch set status = ?, warning_count = ?, "
                         + "blocking_error_count = ?, staging_expires_at = ?, confirmed_at = ?, "
@@ -101,7 +109,7 @@ public class JdbcImportBatchRepository implements ImportBatchRepository {
                 toTimestamp(batch.getStagingExpiresAt()),
                 toTimestamp(batch.getConfirmedAt()),
                 batch.getConfirmedBy(),
-                "system",
+                auditedActor,
                 batch.getId(),
                 batch.getScope().getTenantId(),
                 batch.getScope().getWorkspaceId(),
