@@ -15,7 +15,7 @@ The original workflow used OWASP Dependency-Check `10.0.4`. On 2026 NVD data it 
 - the RetireJS repository download timed out and, with no local RetireJS data, aborted the Maven dependency analysis;
 - the roughly 650 MB vulnerability database shared the generic Maven cache, so updates were not reliably persisted between runs.
 
-The workflow now uses Dependency-Check `12.2.2` (Java 11 compatible), disables only the unrelated RetireJS and hosted-suppression remote sources, retains NVD and CISA analysis, restores/saves a dedicated database cache, uploads HTML/JSON reports even when the CVSS gate fails, and runs permission/SSRF/path-traversal regressions before the long dependency scan.
+The workflow now uses Dependency-Check `12.2.2` (Java 11 compatible), disables only the unrelated RetireJS and hosted-suppression remote sources, retains NVD and CISA analysis, restores/saves a dedicated database cache, uploads HTML/JSON reports even when the CVSS gate fails, and runs permission/SSRF/path-traversal regressions before the long dependency scan. A cold CI scan that exits before report generation is retried up to three times in the same runner; partial database state is cached after the final attempt so the next run does not restart from zero. Once a JSON report exists, a CVSS gate failure is final and is not retried.
 
 ## 3. Reproduction
 

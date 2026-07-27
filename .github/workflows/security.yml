@@ -39,13 +39,28 @@ jobs:
       - name: Scan runtime dependencies
         id: dependency-check
         continue-on-error: true
-        run: >-
-          mvn -B -ntp org.owasp:dependency-check-maven:12.2.2:check
-          -DfailBuildOnCVSS=9 -DskipTestScope=true -Dformats=HTML,JSON
-          -DdataDirectory=${{ runner.temp }}/dependency-check-data
-          -DretireJsAnalyzerEnabled=false -DhostedSuppressionsEnabled=false
+        shell: bash
+        run: |
+          set +e
+          status=1
+          for attempt in 1 2 3; do
+            rm -f target/dependency-check-report.html target/dependency-check-report.json
+            mvn -B -ntp org.owasp:dependency-check-maven:12.2.2:check \
+              -DfailBuildOnCVSS=9 -DskipTestScope=true -Dformats=HTML,JSON \
+              -DdataDirectory=${{ runner.temp }}/dependency-check-data \
+              -DretireJsAnalyzerEnabled=false -DhostedSuppressionsEnabled=false
+            status=$?
+            if [[ -f target/dependency-check-report.json ]]; then
+              exit "$status"
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              echo "Dependency data update failed before report generation; retrying (${attempt}/3)."
+              sleep 15
+            fi
+          done
+          exit "$status"
       - name: Save dependency-check data
-        if: always() && hashFiles('target/dependency-check-report.json') != ''
+        if: always() && steps.dependency-check.outcome != 'skipped'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/dependency-check-data
