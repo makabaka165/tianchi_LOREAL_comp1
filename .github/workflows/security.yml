@@ -12,7 +12,7 @@ permissions:
 jobs:
   security:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -24,12 +24,42 @@ jobs:
         run: >-
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2
           detect --source=/repo --no-git --redact
-      - name: Scan runtime dependencies
-        run: >-
-          mvn -B -ntp org.owasp:dependency-check-maven:10.0.4:check
-          -DfailBuildOnCVSS=9 -DskipTestScope=true
       - name: Run permission, SSRF and path traversal regressions
         run: >-
           mvn -B -ntp
           -Dtest=AiPermissionHandlerScanTest,AnonymousAiManagementAccessTest,SafeHttpClientTest,FilePathTraversalTest,SandboxFileServiceTest
           test
+      - name: Restore dependency-check data
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/dependency-check-data
+          key: dependency-check-v12-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            dependency-check-v12-${{ runner.os }}-
+      - name: Scan runtime dependencies
+        id: dependency-check
+        continue-on-error: true
+        run: >-
+          mvn -B -ntp org.owasp:dependency-check-maven:12.2.2:check
+          -DfailBuildOnCVSS=9 -DskipTestScope=true -Dformats=HTML,JSON
+          -DdataDirectory=${{ runner.temp }}/dependency-check-data
+          -DretireJsAnalyzerEnabled=false -DhostedSuppressionsEnabled=false
+      - name: Save dependency-check data
+        if: always() && hashFiles('target/dependency-check-report.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/dependency-check-data
+          key: dependency-check-v12-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Upload dependency-check reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-${{ github.sha }}
+          path: |
+            target/dependency-check-report.html
+            target/dependency-check-report.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Enforce dependency vulnerability gate
+        if: always() && steps.dependency-check.outcome == 'failure'
+        run: exit 1

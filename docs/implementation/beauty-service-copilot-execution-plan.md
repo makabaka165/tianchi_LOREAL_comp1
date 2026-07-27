@@ -10,7 +10,7 @@
 | 计划版本 | `1.1` |
 | 建立日期 | `2026-07-26` |
 | 最近复核 | `2026-07-27` |
-| 当前代码基线 | `main@11f136b`（DATA-002） |
+| DATA-002 功能提交 | `main@11f136b` |
 | 当前执行阶段 | M1 进行中；`DATA-002=DONE`，`DATA-003`、`RISK-001=READY` |
 | 目标仓库 | `https://github.com/makabaka165/tianchi_LOREAL_comp1.git` |
 | 第一条演示链路 | 会话 `S00082`，不良反应风险场景 |
@@ -724,7 +724,8 @@ CustomerServiceOpenApiContractTest
   - 迁移结果：无迁移。
   - 偏差/后续任务：官方数据中 3 条预售订单付款时间带“（定金）”注记——parser 按前缀时间解析并产生 `ANNOTATED_DATETIME` warning（非阻断），已记录在案；解析输出为 Java 11 兼容 typed row 类（`ImportRows`），非 sealed 层次；别名 sourceScope 归并粒度为 chat sheet 级（同脱敏昵称=1 别名，与官方 112 计数一致）。
   - 2026-07-27 独立复核：设置 `HMDP_CS_SOURCE_ROOT=E:\tianchi_LOREAL\comp1` 后，`OfficialWorkbookParserSmokeTest` 实际执行 `1/1` 通过（非条件跳过）；`CompetitionWorkbookParserTest,CustomerServiceModuleBoundaryTest` 共 `27/27` 通过；`mvn clean verify` 共 `794/794` 通过；前端 lint、typecheck、`13/13` 测试和 production build 通过。
-  - 未关闭门禁：本机 Docker Desktop Linux engine 未启动，`full-integration` 中 Testcontainers 用例会被 `disabledWithoutDocker` 跳过，因此本次不把 Maven 的 profile 成功记作 M1 full-integration 通过；须在 Docker 可用后于 DATA-006/M1 退出前补跑并留证。
+  - 集成复核：本机 Docker Desktop Linux engine 未启动，因此本地 `full-integration` 的 Testcontainers 跳过结果不计入通过；GitHub Actions 在 `main@133d0aa` 上完成真实 Docker `Full integration verification` 并通过，补齐当前提交的远端集成证据。M1 仍须完成 DATA-003 至 DATA-006 才能退出。
+  - 安全基线：Security workflow 的密钥扫描和安全回归可执行，但运行时依赖存在 CVSS 9.0+ 基线，发布门禁保持 `BLOCKED`；扫描器修复、13 个高危依赖清单和处置边界见 [2026-07-27 Security 基线](evidence/security-baseline-20260727.md)。该平台债务不回退 DATA-002 状态，也不得用无证据 suppression 假绿。
 
 ### DATA-003 dry-run、错误报告和确认导入 API
 
@@ -1613,7 +1614,7 @@ npm run build
 
 ## 19. 下一执行入口
 
-当前执行快照是 `main@11f136b`：M0 已完成，M1 已完成 DATA-001/002，但尚未完成导入 API、幂等提交、工作台查询和全量导入验收。下一位工程师或 Agent 不需要重新规划整体架构，主线直接执行 `DATA-003`：
+当前功能完成点是 `DATA-002`（提交 `11f136b`）：M0 已完成，M1 已完成 DATA-001/002；后续提交只处理执行状态、Java 11 CI 兼容和安全证据，尚未实现导入 API、幂等提交、工作台查询或全量导入验收。下一位工程师或 Agent 不需要重新规划整体架构，主线直接执行 `DATA-003`：
 
 1. 读取本文件 0-8 节、DATA-003 任务卡、DATA-002 执行证据，以及 OpenAPI 和客服 scope 权限契约；不要重新实现 parser。
 2. 确认工作树只包含已知改动，HEAD 不早于 `11f136b`，原始 XLSX SHA-256 仍与 0.1 节一致；原始赛题文件继续留在仓库外。
@@ -1623,5 +1624,7 @@ npm run build
 6. 只有 DATA-003 DoD 全部满足且证据已写回任务卡，才提交并把 `DATA-004` 置为 `READY`。不得因为 DATA-002 已完成就宣称 M1 完成。
 
 `RISK-001` 也是 `READY`，但它不替代关键路径上的 DATA-003。单人连续执行优先 DATA-003；只有在独立分支、迁移序号和共享文件无冲突时，才可把 RISK-001 作为并行支线推进。
+
+平台 Security 门禁当前因既有运行时依赖基线阻塞，详见 `docs/implementation/evidence/security-baseline-20260727.md`。它不改变 DATA-003 的功能任务顺序，但必须作为独立安全工作流在 RELEASE-002 前关闭；不得为获得绿色状态而整体降低 CVSS 阈值或批量 suppression。
 
 本计划完成的定义不是“所有任务写了代码”，而是 `RELEASE-002=DONE`、M5 门禁全部通过、S00082 的实时与离线链路均可复现，并且每项答辩结论都有版本化证据。
